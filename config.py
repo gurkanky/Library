@@ -5,12 +5,13 @@ load_dotenv()
 
 class Config:
     # MSSQL Database Configuration
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 
-        'mssql+pyodbc://sa:YourPassword123@localhost:1433/KutuphaneDB?driver=ODBC+Driver+17+for+SQL+Server')
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL',
+                                        'mssql+pyodbc://sa:123456@localhost/KutuphaneDB?driver=ODBC+Driver+17+for+SQL+Server')
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    
+
     # JWT Configuration
-    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this-in-production')
+    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', '27360e82b95fc439d56610ba42c9a253')
     JWT_ACCESS_TOKEN_EXPIRES = 86400  # 24 hours
     
     # Flask-Mail Configuration
