@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Akıllı Kütüphane</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">📚 Akıllı Kütüphane</div>
+            <nav>
+                <ul>
+                    <li><a href="dashboard.html">Dashboard</a></li>
+                    <li><a href="books.html">Kitaplar</a></li>
+                    <li><a href="my-books.html">Ödünç Kitaplarım</a></li>
+                    <li class="admin-link hidden"><a href="admin.html">Admin Panel</a></li>
+                    <li><a href="#" onclick="logout(); return false;">Çıkış</a></li>
+                </ul>
+            </nav>
+            <div class="user-info">
+                <span class="user-info-text"></span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <h1 style="margin: 30px 0;">Dashboard</h1>
+        
+        <div class="grid">
+            <div class="card">
+                <h3>Ödünç Kitaplarım</h3>
+                <p id="borrowCount" style="font-size: 2rem; color: var(--primary-color);">-</p>
+                <a href="my-books.html" class="btn btn-primary">Detaylar</a>
+            </div>
+            
+            <div class="card">
+                <h3>Toplam Borç</h3>
+                <p id="debtAmount" style="font-size: 2rem; color: var(--danger-color);">-</p>
+                <a href="my-books.html" class="btn btn-warning">Ceza Detayları</a>
+            </div>
+            
+            <div class="card">
+                <h3>Geç İade</h3>
+                <p id="overdueCount" style="font-size: 2rem; color: var(--danger-color);">-</p>
+                <a href="my-books.html" class="btn btn-danger">İncele</a>
+            </div>
+        </div>
+        
+        <div class="card" style="margin-top: 30px;">
+            <h2 class="card-header">Son Ödünç İşlemlerim</h2>
+            <div id="recentBorrows">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/api.js"></script>
+    <script src="static/js/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Kullanıcı kontrolü
+            const user = api.getUser();
+            if (!user) {
+                window.location.href = 'login.html';
+                return;
+            }
+            
+            // Admin linkini göster/gizle
+            if (user.rol === 'Admin') {
+                document.querySelectorAll('.admin-link').forEach(el => el.classList.remove('hidden'));
+            }
+            
+            updateUserInfo(user);
+            
+            // Dashboard verilerini yükle
+            await loadDashboardData();
+        });
+        
+        async function loadDashboardData() {
+            try {
+                // Ödünç kitaplar
+                const borrowsResult = await borrowAPI.getMyBooks();
+                const activeBorrows = borrowsResult.borrows.filter(b => b.durum === 'Aktif');
+                const overdueBorrows = borrowsResult.borrows.filter(b => b.gecikmeGunu > 0);
+                
+                document.getElementById('borrowCount').textContent = activeBorrows.length;
+                document.getElementById('overdueCount').textContent = overdueBorrows.length;
+                
+                // Borç bilgisi
+                const debtResult = await userAPI.getDebt();
+                document.getElementById('debtAmount').textContent = debtResult.toplamBorc.toFixed(2) + ' TL';
+                
+                // Son ödünç işlemleri
+                displayRecentBorrows(borrowsResult.borrows.slice(0, 5));
+                
+            } catch (error) {
+                console.error('Dashboard verileri yüklenirken hata:', error);
+                showAlert('Veriler yüklenirken bir hata oluştu', 'danger');
+            }
+        }
+        
+        function displayRecentBorrows(borrows) {
+            const container = document.getElementById('recentBorrows');
+            
+            if (borrows.length === 0) {
+                container.innerHTML = '<p>Henüz ödünç kitabınız yok.</p>';
+                return;
+            }
+            
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Kitap</th>
+                        <th>Ödünç Tarihi</th>
+                        <th>İade Tarihi</th>
+                        <th>Durum</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${borrows.map(borrow => `
+                        <tr>
+                            <td>${borrow.kitap ? borrow.kitap.baslik : 'Bilinmiyor'}</td>
+                            <td>${new Date(borrow.oduncAlmaTarihi).toLocaleDateString('tr-TR')}</td>
+                            <td>${borrow.beklenenIadeTarihi ? new Date(borrow.beklenenIadeTarihi).toLocaleDateString('tr-TR') : '-'}</td>
+                            <td>
+                                <span class="badge ${borrow.durum === 'Aktif' ? 'badge-success' : 'badge-warning'}">
+                                    ${borrow.durum}
+                                </span>
+                                ${borrow.gecikmeGunu > 0 ? `<span class="badge badge-danger">${borrow.gecikmeGunu} gün gecikme</span>` : ''}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+            
+            container.innerHTML = '';
+            container.appendChild(table);
+        }
+    </script>
+</body>
+</html>
+

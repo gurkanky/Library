@@ -1,0 +1,592 @@
+openapi: 3.0.0
+info:
+  title: Akıllı Kütüphane Yönetim Sistemi API
+  description: Flask ve MSSQL kullanılarak geliştirilmiş kütüphane yönetim sistemi REST API dokümantasyonu
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@kutuphane.com
+
+servers:
+  - url: http://localhost:5000/api
+    description: Local development server
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        kullaniciID:
+          type: integer
+        ad:
+          type: string
+        soyad:
+          type: string
+        eposta:
+          type: string
+        rol:
+          type: string
+          enum: [Admin, Uye]
+        telefon:
+          type: string
+        adres:
+          type: string
+        aktif:
+          type: boolean
+
+    Book:
+      type: object
+      properties:
+        kitapID:
+          type: integer
+        baslik:
+          type: string
+        isbn:
+          type: string
+        yayinYili:
+          type: integer
+        mevcutKopyaSayisi:
+          type: integer
+        toplamKopyaSayisi:
+          type: integer
+        kategoriID:
+          type: integer
+        kategoriAdi:
+          type: string
+        yayinEvi:
+          type: string
+        dil:
+          type: string
+        aciklama:
+          type: string
+
+    Borrow:
+      type: object
+      properties:
+        oduncID:
+          type: integer
+        kullaniciID:
+          type: integer
+        kitapID:
+          type: integer
+        oduncAlmaTarihi:
+          type: string
+          format: date-time
+        beklenenIadeTarihi:
+          type: string
+          format: date-time
+        iadeTarihi:
+          type: string
+          format: date-time
+        durum:
+          type: string
+          enum: [Aktif, IadeEdildi, Gecikmis]
+        gecikmeGunu:
+          type: integer
+
+    Category:
+      type: object
+      properties:
+        kategoriID:
+          type: integer
+        kategoriAdi:
+          type: string
+        aciklama:
+          type: string
+
+    Author:
+      type: object
+      properties:
+        yazarID:
+          type: integer
+        ad:
+          type: string
+        soyad:
+          type: string
+        dogumTarihi:
+          type: string
+          format: date
+        ulke:
+          type: string
+        biyografi:
+          type: string
+
+    Penalty:
+      type: object
+      properties:
+        cezaID:
+          type: integer
+        kullaniciID:
+          type: integer
+        oduncID:
+          type: integer
+        cezaMiktari:
+          type: number
+          format: float
+        cezaNedeni:
+          type: string
+        durum:
+          type: string
+          enum: [Beklemede, Odendi, Iptal]
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Kullanıcı kaydı
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ad
+                - soyad
+                - eposta
+                - sifre
+              properties:
+                ad:
+                  type: string
+                soyad:
+                  type: string
+                eposta:
+                  type: string
+                sifre:
+                  type: string
+                telefon:
+                  type: string
+                adres:
+                  type: string
+      responses:
+        '201':
+          description: Kayıt başarılı
+        '400':
+          description: Hatalı istek
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Kullanıcı girişi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - eposta
+                - sifre
+              properties:
+                eposta:
+                  type: string
+                sifre:
+                  type: string
+      responses:
+        '200':
+          description: Giriş başarılı
+        '401':
+          description: Hatalı giriş bilgileri
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Mevcut kullanıcı bilgisi
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Kullanıcı bilgisi
+        '401':
+          description: Yetkisiz erişim
+
+  /books:
+    get:
+      tags:
+        - Books
+      summary: Tüm kitapları listele veya arama yap
+      parameters:
+        - name: title
+          in: query
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          schema:
+            type: integer
+        - name: available_only
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Kitap listesi
+    post:
+      tags:
+        - Books
+      summary: Yeni kitap ekle (Admin only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Book'
+      responses:
+        '201':
+          description: Kitap eklendi
+        '403':
+          description: Yetkisiz erişim
+
+  /books/{book_id}:
+    get:
+      tags:
+        - Books
+      summary: Kitap detayını getir
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Kitap detayı
+    put:
+      tags:
+        - Books
+      summary: Kitap güncelle (Admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Book'
+      responses:
+        '200':
+          description: Kitap güncellendi
+    delete:
+      tags:
+        - Books
+      summary: Kitap sil (Admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Kitap silindi
+
+  /borrow:
+    post:
+      tags:
+        - Borrow
+      summary: Kitap ödünç al
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - kitapID
+              properties:
+                kitapID:
+                  type: integer
+                oduncGunSayisi:
+                  type: integer
+                  default: 21
+      responses:
+        '201':
+          description: Kitap ödünç alındı
+
+  /borrow/{borrow_id}/return:
+    post:
+      tags:
+        - Borrow
+      summary: Kitap iade et
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: borrow_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Kitap iade edildi
+
+  /borrow/my-books:
+    get:
+      tags:
+        - Borrow
+      summary: Kullanıcının ödünç kitapları
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Ödünç kitap listesi
+
+  /borrow/all:
+    get:
+      tags:
+        - Borrow
+      summary: Tüm ödünç işlemleri (Admin only)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Tüm ödünç işlemleri
+
+  /borrow/overdue:
+    get:
+      tags:
+        - Borrow
+      summary: Geç iade edilen kitaplar (Admin only)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Geç iade kitaplar
+
+  /categories:
+    get:
+      tags:
+        - Categories
+      summary: Tüm kategorileri listele
+      responses:
+        '200':
+          description: Kategori listesi
+    post:
+      tags:
+        - Categories
+      summary: Yeni kategori ekle (Admin only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+      responses:
+        '201':
+          description: Kategori eklendi
+
+  /categories/{category_id}:
+    get:
+      tags:
+        - Categories
+      summary: Kategori detayını getir
+      parameters:
+        - name: category_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Kategori detayı
+    put:
+      tags:
+        - Categories
+      summary: Kategori güncelle (Admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: category_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+      responses:
+        '200':
+          description: Kategori güncellendi
+    delete:
+      tags:
+        - Categories
+      summary: Kategori sil (Admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: category_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Kategori silindi
+
+  /authors:
+    get:
+      tags:
+        - Authors
+      summary: Tüm yazarları listele
+      responses:
+        '200':
+          description: Yazar listesi
+    post:
+      tags:
+        - Authors
+      summary: Yeni yazar ekle (Admin only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Author'
+      responses:
+        '201':
+          description: Yazar eklendi
+
+  /authors/{author_id}:
+    get:
+      tags:
+        - Authors
+      summary: Yazar detayını getir
+      parameters:
+        - name: author_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Yazar detayı
+    put:
+      tags:
+        - Authors
+      summary: Yazar güncelle (Admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: author_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Author'
+      responses:
+        '200':
+          description: Yazar güncellendi
+    delete:
+      tags:
+        - Authors
+      summary: Yazar sil (Admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: author_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Yazar silindi
+
+  /users/profile:
+    get:
+      tags:
+        - Users
+      summary: Kullanıcı profili
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Kullanıcı profili
+
+  /users/penalties:
+    get:
+      tags:
+        - Users
+      summary: Kullanıcının cezaları
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Ceza listesi
+
+  /users/debt:
+    get:
+      tags:
+        - Users
+      summary: Kullanıcının toplam borcu
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Toplam borç
+
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: Tüm kullanıcılar (Admin only)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Kullanıcı listesi
+
+  /admin/statistics:
+    get:
+      tags:
+        - Admin
+      summary: İstatistikler (Admin only)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Sistem istatistikleri
+

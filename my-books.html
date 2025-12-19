@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ödünç Kitaplarım - Akıllı Kütüphane</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">📚 Akıllı Kütüphane</div>
+            <nav>
+                <ul>
+                    <li><a href="dashboard.html">Dashboard</a></li>
+                    <li><a href="books.html">Kitaplar</a></li>
+                    <li><a href="my-books.html">Ödünç Kitaplarım</a></li>
+                    <li class="admin-link hidden"><a href="admin.html">Admin Panel</a></li>
+                    <li><a href="#" onclick="logout(); return false;">Çıkış</a></li>
+                </ul>
+            </nav>
+            <div class="user-info">
+                <span class="user-info-text"></span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <h1 style="margin: 30px 0;">Ödünç Kitaplarım</h1>
+        
+        <div class="card">
+            <h2 class="card-header">Aktif Ödünçler</h2>
+            <div id="activeBorrows">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2 class="card-header">Ceza Bilgileri</h2>
+            <div id="penaltiesContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2 class="card-header">Geçmiş İşlemler</h2>
+            <div id="historyBorrows">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/api.js"></script>
+    <script src="static/js/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            const user = api.getUser();
+            if (!user) {
+                window.location.href = 'login.html';
+                return;
+            }
+            
+            if (user.rol === 'Admin') {
+                document.querySelectorAll('.admin-link').forEach(el => el.classList.remove('hidden'));
+            }
+            
+            updateUserInfo(user);
+            
+            await loadMyBooks();
+            await loadPenalties();
+        });
+        
+        async function loadMyBooks() {
+            try {
+                const result = await borrowAPI.getMyBooks();
+                const active = result.borrows.filter(b => b.durum === 'Aktif');
+                const history = result.borrows.filter(b => b.durum === 'IadeEdildi');
+                
+                displayBorrows(active, 'activeBorrows', true);
+                displayBorrows(history, 'historyBorrows', false);
+            } catch (error) {
+                console.error('Ödünç kitaplar yüklenirken hata:', error);
+                showAlert('Veriler yüklenirken bir hata oluştu', 'danger');
+            }
+        }
+        
+        function displayBorrows(borrows, containerId, showReturnButton) {
+            const container = document.getElementById(containerId);
+            
+            if (borrows.length === 0) {
+                container.innerHTML = '<p>Kayıt bulunamadı.</p>';
+                return;
+            }
+            
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Kitap</th>
+                        <th>Ödünç Tarihi</th>
+                        <th>Beklenen İade</th>
+                        <th>Durum</th>
+                        ${showReturnButton ? '<th>İşlem</th>' : ''}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${borrows.map(borrow => `
+                        <tr>
+                            <td>${borrow.kitap ? borrow.kitap.baslik : 'Bilinmiyor'}</td>
+                            <td>${new Date(borrow.oduncAlmaTarihi).toLocaleDateString('tr-TR')}</td>
+                            <td>${new Date(borrow.beklenenIadeTarihi).toLocaleDateString('tr-TR')}</td>
+                            <td>
+                                <span class="badge ${borrow.durum === 'Aktif' ? 'badge-success' : 'badge-warning'}">
+                                    ${borrow.durum}
+                                </span>
+                                ${borrow.gecikmeGunu > 0 ? `<span class="badge badge-danger">${borrow.gecikmeGunu} gün gecikme</span>` : ''}
+                            </td>
+                            ${showReturnButton ? `
+                                <td>
+                                    <button onclick="returnBook(${borrow.oduncID})" class="btn btn-primary">İade Et</button>
+                                </td>
+                            ` : ''}
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+            
+            container.innerHTML = '';
+            container.appendChild(table);
+        }
+        
+        async function returnBook(borrowId) {
+            if (!confirm('Bu kitabı iade etmek istediğinize emin misiniz?')) {
+                return;
+            }
+            
+            try {
+                const result = await borrowAPI.returnBook(borrowId);
+                if (result.success) {
+                    showAlert('Kitap iade edildi!', 'success');
+                    await loadMyBooks();
+                    await loadPenalties();
+                }
+            } catch (error) {
+                showAlert(error.message || 'Kitap iade edilirken bir hata oluştu', 'danger');
+            }
+        }
+        
+        async function loadPenalties() {
+            try {
+                const result = await userAPI.getPenalties();
+                const pending = result.penalties.filter(p => p.durum === 'Beklemede');
+                
+                const container = document.getElementById('penaltiesContainer');
+                
+                if (pending.length === 0) {
+                    container.innerHTML = '<p>Bekleyen cezanız yok.</p>';
+                    return;
+                }
+                
+                const table = document.createElement('table');
+                table.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th>Ceza Nedeni</th>
+                            <th>Miktar</th>
+                            <th>Tarih</th>
+                            <th>İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${pending.map(penalty => `
+                            <tr>
+                                <td>${penalty.cezaNedeni || '-'}</td>
+                                <td>${penalty.cezaMiktari.toFixed(2)} TL</td>
+                                <td>${new Date(penalty.olusturmaTarihi).toLocaleDateString('tr-TR')}</td>
+                                <td>
+                                    <button onclick="payPenalty(${penalty.cezaID})" class="btn btn-success">Öde</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                `;
+                
+                container.innerHTML = '';
+                container.appendChild(table);
+            } catch (error) {
+                console.error('Ceza bilgileri yüklenirken hata:', error);
+            }
+        }
+        
+        async function payPenalty(penaltyId) {
+            if (!confirm('Bu cezayı ödemek istediğinize emin misiniz?')) {
+                return;
+            }
+            
+            try {
+                const result = await userAPI.payPenalty(penaltyId);
+                if (result.success) {
+                    showAlert('Ceza ödendi!', 'success');
+                    await loadPenalties();
+                }
+            } catch (error) {
+                showAlert(error.message || 'Ceza ödenirken bir hata oluştu', 'danger');
+            }
+        }
+    </script>
+</body>
+</html>
+

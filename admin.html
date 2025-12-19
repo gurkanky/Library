@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Akıllı Kütüphane</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">📚 Akıllı Kütüphane</div>
+            <nav>
+                <ul>
+                    <li><a href="dashboard.html">Dashboard</a></li>
+                    <li><a href="books.html">Kitaplar</a></li>
+                    <li><a href="my-books.html">Ödünç Kitaplarım</a></li>
+                    <li><a href="admin.html">Admin Panel</a></li>
+                    <li><a href="#" onclick="logout(); return false;">Çıkış</a></li>
+                </ul>
+            </nav>
+            <div class="user-info">
+                <span class="user-info-text"></span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <h1 style="margin: 30px 0;">Admin Panel</h1>
+        
+        <div class="grid">
+            <div class="card">
+                <h3>Toplam Kitap</h3>
+                <p id="statTotalBooks" style="font-size: 2rem; color: var(--primary-color);">-</p>
+            </div>
+            
+            <div class="card">
+                <h3>Toplam Kullanıcı</h3>
+                <p id="statTotalUsers" style="font-size: 2rem; color: var(--primary-color);">-</p>
+            </div>
+            
+            <div class="card">
+                <h3>Aktif Ödünç</h3>
+                <p id="statActiveBorrows" style="font-size: 2rem; color: var(--success-color);">-</p>
+            </div>
+            
+            <div class="card">
+                <h3>Geç İade</h3>
+                <p id="statOverdue" style="font-size: 2rem; color: var(--danger-color);">-</p>
+            </div>
+        </div>
+        
+        <div class="card" style="margin-top: 30px;">
+            <h2 class="card-header">Geç İade Edilen Kitaplar</h2>
+            <button onclick="checkOverdue()" class="btn btn-warning" style="margin-bottom: 20px;">Geç İade Kontrolü Yap</button>
+            <div id="overdueBorrows">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" style="margin-top: 30px;">
+            <h2 class="card-header">Tüm Ödünç İşlemleri</h2>
+            <div id="allBorrows">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" style="margin-top: 30px;">
+            <h2 class="card-header">Tüm Ceza Kayıtları</h2>
+            <div id="allPenalties">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/api.js"></script>
+    <script src="static/js/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            const user = api.getUser();
+            if (!user || user.rol !== 'Admin') {
+                window.location.href = 'dashboard.html';
+                return;
+            }
+            
+            updateUserInfo(user);
+            
+            await loadStatistics();
+            await loadOverdueBorrows();
+            await loadAllBorrows();
+            await loadAllPenalties();
+        });
+        
+        async function loadStatistics() {
+            try {
+                const result = await adminAPI.getStatistics();
+                const stats = result.statistics;
+                
+                document.getElementById('statTotalBooks').textContent = stats.totalBooks;
+                document.getElementById('statTotalUsers').textContent = stats.totalUsers;
+                document.getElementById('statActiveBorrows').textContent = stats.activeBorrows;
+                document.getElementById('statOverdue').textContent = stats.overdueBorrows;
+            } catch (error) {
+                console.error('İstatistikler yüklenirken hata:', error);
+            }
+        }
+        
+        async function loadOverdueBorrows() {
+            try {
+                const result = await borrowAPI.getOverdue();
+                displayBorrowsTable(result.borrows, 'overdueBorrows');
+            } catch (error) {
+                console.error('Geç iade kitaplar yüklenirken hata:', error);
+            }
+        }
+        
+        async function loadAllBorrows() {
+            try {
+                const result = await borrowAPI.getAll();
+                displayBorrowsTable(result.borrows, 'allBorrows');
+            } catch (error) {
+                console.error('Tüm ödünç işlemleri yüklenirken hata:', error);
+            }
+        }
+        
+        function displayBorrowsTable(borrows, containerId) {
+            const container = document.getElementById(containerId);
+            
+            if (borrows.length === 0) {
+                container.innerHTML = '<p>Kayıt bulunamadı.</p>';
+                return;
+            }
+            
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Kullanıcı</th>
+                        <th>Kitap</th>
+                        <th>Ödünç Tarihi</th>
+                        <th>Beklenen İade</th>
+                        <th>İade Tarihi</th>
+                        <th>Durum</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${borrows.map(borrow => `
+                        <tr>
+                            <td>${borrow.kullanici ? `${borrow.kullanici.ad} ${borrow.kullanici.soyad}` : '-'}</td>
+                            <td>${borrow.kitap ? borrow.kitap.baslik : '-'}</td>
+                            <td>${new Date(borrow.oduncAlmaTarihi).toLocaleDateString('tr-TR')}</td>
+                            <td>${new Date(borrow.beklenenIadeTarihi).toLocaleDateString('tr-TR')}</td>
+                            <td>${borrow.iadeTarihi ? new Date(borrow.iadeTarihi).toLocaleDateString('tr-TR') : '-'}</td>
+                            <td>
+                                <span class="badge ${borrow.durum === 'Aktif' ? 'badge-success' : borrow.durum === 'Gecikmis' ? 'badge-danger' : 'badge-warning'}">
+                                    ${borrow.durum}
+                                </span>
+                                ${borrow.gecikmeGunu > 0 ? `<span class="badge badge-danger">${borrow.gecikmeGunu} gün</span>` : ''}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+            
+            container.innerHTML = '';
+            container.appendChild(table);
+        }
+        
+        async function loadAllPenalties() {
+            try {
+                const result = await adminAPI.getAllPenalties();
+                const container = document.getElementById('allPenalties');
+                
+                if (result.penalties.length === 0) {
+                    container.innerHTML = '<p>Ceza kaydı bulunamadı.</p>';
+                    return;
+                }
+                
+                const table = document.createElement('table');
+                table.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th>Kullanıcı</th>
+                            <th>Ceza Nedeni</th>
+                            <th>Miktar</th>
+                            <th>Durum</th>
+                            <th>Tarih</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${result.penalties.map(penalty => `
+                            <tr>
+                                <td>${penalty.odunc && penalty.odunc.kullanici ? `${penalty.odunc.kullanici.ad} ${penalty.odunc.kullanici.soyad}` : '-'}</td>
+                                <td>${penalty.cezaNedeni || '-'}</td>
+                                <td>${penalty.cezaMiktari.toFixed(2)} TL</td>
+                                <td>
+                                    <span class="badge ${penalty.durum === 'Odendi' ? 'badge-success' : 'badge-warning'}">
+                                        ${penalty.durum}
+                                    </span>
+                                </td>
+                                <td>${new Date(penalty.olusturmaTarihi).toLocaleDateString('tr-TR')}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                `;
+                
+                container.innerHTML = '';
+                container.appendChild(table);
+            } catch (error) {
+                console.error('Ceza kayıtları yüklenirken hata:', error);
+            }
+        }
+        
+        async function checkOverdue() {
+            try {
+                showLoading('Kontrol ediliyor...');
+                const result = await borrowAPI.checkOverdue();
+                showAlert(`${result.overdue_count} geç iade kaydı bulundu ve bildirim gönderildi.`, 'success');
+                await loadOverdueBorrows();
+                await loadStatistics();
+            } catch (error) {
+                showAlert(error.message || 'Kontrol yapılırken bir hata oluştu', 'danger');
+            } finally {
+                hideLoading();
+            }
+        }
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Akıllı Kütüphane Yönetim Sistemi - Giriş</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">📚 Akıllı Kütüphane</div>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Ana Sayfa</a></li>
+                    <li class="auth-link"><a href="login.html">Giriş Yap</a></li>
+                    <li class="auth-link"><a href="register.html">Kayıt Ol</a></li>
+                    <li class="user-link hidden"><a href="dashboard.html">Dashboard</a></li>
+                    <li class="user-link hidden"><a href="#" onclick="logout(); return false;">Çıkış</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="card" style="max-width: 600px; margin: 50px auto; text-align: center;">
+            <h1 style="color: var(--primary-color); margin-bottom: 20px;">Akıllı Kütüphane Yönetim Sistemi</h1>
+            <p style="font-size: 1.1rem; margin-bottom: 30px;">
+                Kütüphane yönetim sistemine hoş geldiniz. Kitap arayın, ödünç alın ve yönetin.
+            </p>
+            
+            <div style="display: flex; gap: 20px; justify-content: center;">
+                <a href="login.html" class="btn btn-primary">Giriş Yap</a>
+                <a href="register.html" class="btn btn-secondary">Kayıt Ol</a>
+            </div>
+            
+            <div style="margin-top: 40px;">
+                <h3>Özellikler</h3>
+                <div class="grid" style="margin-top: 20px;">
+                    <div class="book-card">
+                        <h4>📖 Kitap Arama</h4>
+                        <p>Geniş kütüphane koleksiyonunda arama yapın</p>
+                    </div>
+                    <div class="book-card">
+                        <h4>📚 Ödünç Alma</h4>
+                        <p>Kitapları kolayca ödünç alın</p>
+                    </div>
+                    <div class="book-card">
+                        <h4>⏰ Otomatik Ceza</h4>
+                        <p>Geç iade için otomatik ceza hesaplama</p>
+                    </div>
+                    <div class="book-card">
+                        <h4>👤 Kullanıcı Yönetimi</h4>
+                        <p>Profil ve ödünç takibi</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/api.js"></script>
+    <script src="static/js/auth.js"></script>
+</body>
+</html>
+
