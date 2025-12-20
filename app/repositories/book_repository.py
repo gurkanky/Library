@@ -33,13 +33,12 @@ class BookRepository:
     def create(book: Book) -> Book:
         db.session.add(book)
         db.session.commit()
-        db.session.refresh(book)
+        # MSSQL IDENTITY için refresh() gerekmez
         return book
     
     @staticmethod
     def update(book: Book) -> Book:
         db.session.commit()
-        db.session.refresh(book)
         return book
     
     @staticmethod

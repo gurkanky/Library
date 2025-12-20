@@ -67,14 +67,18 @@ async function handleLogin(e) {
         showLoading('Giriş yapılıyor...');
         const result = await authAPI.login(email, password);
         
-        if (result.success) {
+        if (result.success && result.access_token) {
             api.setToken(result.access_token);
             api.setUser(result.user);
+            console.log('Token kaydedildi:', result.access_token.substring(0, 20) + '...');
+            console.log('Kullanıcı bilgisi kaydedildi:', result.user);
             showAlert('Giriş başarılı!', 'success');
             
             setTimeout(() => {
                 window.location.href = 'dashboard.html';
             }, 1000);
+        } else {
+            throw new Error('Token alınamadı');
         }
     } catch (error) {
         showAlert(error.message || 'Giriş başarısız!', 'danger');
@@ -99,14 +103,18 @@ async function handleRegister(e) {
         showLoading('Kayıt yapılıyor...');
         const result = await authAPI.register(formData);
         
-        if (result.success) {
+        if (result.success && result.access_token) {
             api.setToken(result.access_token);
             api.setUser(result.user);
+            console.log('Token kaydedildi:', result.access_token.substring(0, 20) + '...');
+            console.log('Kullanıcı bilgisi kaydedildi:', result.user);
             showAlert('Kayıt başarılı!', 'success');
             
             setTimeout(() => {
                 window.location.href = 'dashboard.html';
             }, 1000);
+        } else {
+            throw new Error('Token alınamadı');
         }
     } catch (error) {
         showAlert(error.message || 'Kayıt başarısız!', 'danger');

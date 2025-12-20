@@ -24,13 +24,12 @@ class PenaltyRepository:
     def create(penalty: Penalty) -> Penalty:
         db.session.add(penalty)
         db.session.commit()
-        db.session.refresh(penalty)
+        # commit() sonrası refresh() gerekmez, MSSQL IDENTITY için refresh() hata verebilir
         return penalty
     
     @staticmethod
     def update(penalty: Penalty) -> Penalty:
         db.session.commit()
-        db.session.refresh(penalty)
         return penalty
     
     @staticmethod

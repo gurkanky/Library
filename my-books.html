@@ -61,13 +61,37 @@
 
     <script src="static/js/api.js"></script>
     <script src="static/js/auth.js"></script>
+    <script src="static/js/token_check.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
-            const user = api.getUser();
-            if (!user) {
+            // Token kontrolü
+            const tokenCheck = checkTokenExpiry();
+            console.log('Token Kontrolü:', tokenCheck);
+            
+            if (!tokenCheck.valid) {
+                console.error('Token geçersiz:', tokenCheck.reason);
+                if (tokenCheck.expired) {
+                    alert('Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
+                }
                 window.location.href = 'login.html';
                 return;
             }
+            
+            const token = api.getToken();
+            if (!token) {
+                console.warn('Token bulunamadı, login sayfasına yönlendiriliyor');
+                window.location.href = 'login.html';
+                return;
+            }
+            
+            const user = api.getUser();
+            if (!user) {
+                console.warn('Kullanıcı bilgisi bulunamadı, login sayfasına yönlendiriliyor');
+                window.location.href = 'login.html';
+                return;
+            }
+            
+            console.log('Token geçerli, kullanıcı:', user);
             
             if (user.rol === 'Admin') {
                 document.querySelectorAll('.admin-link').forEach(el => el.classList.remove('hidden'));
@@ -80,16 +104,43 @@
         });
         
         async function loadMyBooks() {
+            const activeContainer = document.getElementById('activeBorrows');
+            const historyContainer = document.getElementById('historyBorrows');
+            
             try {
                 const result = await borrowAPI.getMyBooks();
-                const active = result.borrows.filter(b => b.durum === 'Aktif');
-                const history = result.borrows.filter(b => b.durum === 'IadeEdildi');
+                
+                if (!result) {
+                    activeContainer.innerHTML = '<p>Veri alınamadı.</p>';
+                    historyContainer.innerHTML = '<p>Veri alınamadı.</p>';
+                    return;
+                }
+                
+                if (!result.success) {
+                    activeContainer.innerHTML = `<p style="color: orange;">${result.message || 'Veri alınamadı'}</p>`;
+                    historyContainer.innerHTML = '<p>Veri yüklenemedi.</p>';
+                    return;
+                }
+                
+                const borrows = result.borrows || [];
+                const active = borrows.filter(b => b.durum === 'Aktif');
+                const history = borrows.filter(b => b.durum === 'IadeEdildi');
                 
                 displayBorrows(active, 'activeBorrows', true);
                 displayBorrows(history, 'historyBorrows', false);
             } catch (error) {
                 console.error('Ödünç kitaplar yüklenirken hata:', error);
-                showAlert('Veriler yüklenirken bir hata oluştu', 'danger');
+                const errorMsg = error.message || 'Veriler yüklenirken bir hata oluştu';
+                // E-posta hatası ise kullanıcıya gösterme, sadece log'a yaz
+                if (errorMsg.includes('Subject') || errorMsg.includes('email') || errorMsg.includes('mail')) {
+                    console.warn('E-posta hatası (görmezden geliniyor):', errorMsg);
+                    activeContainer.innerHTML = '<p>Kayıt bulunamadı.</p>';
+                    historyContainer.innerHTML = '<p>Kayıt bulunamadı.</p>';
+                } else {
+                    activeContainer.innerHTML = `<p style="color: red;">Hata: ${errorMsg}</p>`;
+                    historyContainer.innerHTML = '<p>Veri yüklenemedi.</p>';
+                    showAlert('Veriler yüklenirken bir hata oluştu: ' + errorMsg, 'danger');
+                }
             }
         }
         
@@ -156,11 +207,23 @@
         }
         
         async function loadPenalties() {
+            const container = document.getElementById('penaltiesContainer');
+            
             try {
                 const result = await userAPI.getPenalties();
-                const pending = result.penalties.filter(p => p.durum === 'Beklemede');
                 
-                const container = document.getElementById('penaltiesContainer');
+                if (!result) {
+                    container.innerHTML = '<p>Veri alınamadı.</p>';
+                    return;
+                }
+                
+                if (!result.success) {
+                    container.innerHTML = `<p style="color: orange;">${result.message || 'Veri alınamadı'}</p>`;
+                    return;
+                }
+                
+                const penalties = result.penalties || [];
+                const pending = penalties.filter(p => p.durum === 'Beklemede');
                 
                 if (pending.length === 0) {
                     container.innerHTML = '<p>Bekleyen cezanız yok.</p>';
@@ -181,8 +244,8 @@
                         ${pending.map(penalty => `
                             <tr>
                                 <td>${penalty.cezaNedeni || '-'}</td>
-                                <td>${penalty.cezaMiktari.toFixed(2)} TL</td>
-                                <td>${new Date(penalty.olusturmaTarihi).toLocaleDateString('tr-TR')}</td>
+                                <td>${penalty.cezaMiktari ? penalty.cezaMiktari.toFixed(2) : '0.00'} TL</td>
+                                <td>${penalty.olusturmaTarihi ? new Date(penalty.olusturmaTarihi).toLocaleDateString('tr-TR') : '-'}</td>
                                 <td>
                                     <button onclick="payPenalty(${penalty.cezaID})" class="btn btn-success">Öde</button>
                                 </td>
@@ -195,6 +258,14 @@
                 container.appendChild(table);
             } catch (error) {
                 console.error('Ceza bilgileri yüklenirken hata:', error);
+                const errorMsg = error.message || 'Ceza bilgileri yüklenirken bir hata oluştu';
+                // E-posta hatası ise kullanıcıya gösterme
+                if (errorMsg.includes('Subject') || errorMsg.includes('email') || errorMsg.includes('mail')) {
+                    console.warn('E-posta hatası (görmezden geliniyor):', errorMsg);
+                    container.innerHTML = '<p>Bekleyen cezanız yok.</p>';
+                } else {
+                    container.innerHTML = `<p style="color: red;">Hata: ${errorMsg}</p>`;
+                }
             }
         }
         

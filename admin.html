@@ -86,6 +86,14 @@
     <script src="static/js/auth.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
+            // Token kontrolü
+            const token = api.getToken();
+            if (!token) {
+                console.warn('Token bulunamadı, login sayfasına yönlendiriliyor');
+                window.location.href = 'login.html';
+                return;
+            }
+            
             const user = api.getUser();
             if (!user || user.rol !== 'Admin') {
                 window.location.href = 'dashboard.html';

@@ -20,13 +20,12 @@ class CategoryRepository:
     def create(category: Category) -> Category:
         db.session.add(category)
         db.session.commit()
-        db.session.refresh(category)
+        # MSSQL IDENTITY için refresh() gerekmez
         return category
     
     @staticmethod
     def update(category: Category) -> Category:
         db.session.commit()
-        db.session.refresh(category)
         return category
     
     @staticmethod

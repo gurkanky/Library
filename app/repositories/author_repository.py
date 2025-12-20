@@ -23,13 +23,12 @@ class AuthorRepository:
     def create(author: Author) -> Author:
         db.session.add(author)
         db.session.commit()
-        db.session.refresh(author)
+        # MSSQL IDENTITY için refresh() gerekmez
         return author
     
     @staticmethod
     def update(author: Author) -> Author:
         db.session.commit()
-        db.session.refresh(author)
         return author
     
     @staticmethod

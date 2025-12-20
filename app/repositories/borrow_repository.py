@@ -36,13 +36,12 @@ class BorrowRepository:
     def create(borrow: Borrow) -> Borrow:
         db.session.add(borrow)
         db.session.commit()
-        db.session.refresh(borrow)
+        # MSSQL IDENTITY için refresh() gerekmez
         return borrow
     
     @staticmethod
     def update(borrow: Borrow) -> Borrow:
         db.session.commit()
-        db.session.refresh(borrow)
         return borrow
     
     @staticmethod

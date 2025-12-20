@@ -24,13 +24,12 @@ class UserRepository:
     def create(user: User) -> User:
         db.session.add(user)
         db.session.commit()
-        db.session.refresh(user)
+        # MSSQL IDENTITY için refresh() gerekmez
         return user
     
     @staticmethod
     def update(user: User) -> User:
         db.session.commit()
-        db.session.refresh(user)
         return user
     
     @staticmethod

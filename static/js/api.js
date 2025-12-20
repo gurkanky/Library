@@ -15,7 +15,11 @@ const api = {
     
     // Token'ı al
     getToken() {
-        return authToken || localStorage.getItem('authToken');
+        const token = authToken || localStorage.getItem('authToken');
+        if (!token) {
+            console.warn('Token localStorage\'da bulunamadı');
+        }
+        return token;
     },
     
     // Kullanıcı bilgisini güncelle
@@ -51,6 +55,9 @@ const api = {
         
         if (token) {
             defaultOptions.headers['Authorization'] = `Bearer ${token}`;
+            console.log(`[API] Request to ${endpoint} with token: ${token.substring(0, 20)}...`);
+        } else {
+            console.warn('[API] Token bulunamadı, istek token olmadan gönderiliyor');
         }
         
         const config = {
@@ -62,12 +69,32 @@ const api = {
             }
         };
         
+        console.log('[API] Request config:', {
+            url: url,
+            method: config.method || 'GET',
+            headers: config.headers
+        });
+        
         try {
             const response = await fetch(url, config);
+            console.log('[API] Response status:', response.status);
             const data = await response.json();
             
+            // 401 Unauthorized hatası - token geçersiz veya yok
+            if (response.status === 401) {
+                console.error('Unauthorized - Token geçersiz veya eksik');
+                this.logout();
+                // Login gerektiren sayfalarda login sayfasına yönlendir
+                if (!window.location.pathname.includes('login.html') && 
+                    !window.location.pathname.includes('register.html') &&
+                    !window.location.pathname.includes('index.html')) {
+                    window.location.href = 'login.html';
+                }
+                throw new Error('Oturum süresi dolmuş. Lütfen tekrar giriş yapın.');
+            }
+            
             if (!response.ok) {
-                throw new Error(data.message || 'Bir hata oluştu');
+                throw new Error(data.message || data.msg || 'Bir hata oluştu');
             }
             
             return data;

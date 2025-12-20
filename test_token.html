@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Token Test</title>
+</head>
+<body>
+    <h1>Token Test</h1>
+    <button onclick="testToken()">Token'ı Test Et</button>
+    <div id="result"></div>
+
+    <script src="static/js/api.js"></script>
+    <script>
+        async function testToken() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Test ediliyor...</p>';
+            
+            const token = localStorage.getItem('authToken');
+            console.log('Token:', token);
+            
+            if (!token) {
+                resultDiv.innerHTML = '<p style="color: red;">Token bulunamadı!</p>';
+                return;
+            }
+            
+            try {
+                // API'yi test et
+                const response = await fetch('http://localhost:5000/api/borrow/my-books', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log('Response status:', response.status);
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = '<p style="color: green;">Token geçerli! API çalışıyor.</p>';
+                    resultDiv.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } else {
+                    resultDiv.innerHTML = '<p style="color: red;">Hata: ' + data.message + '</p>';
+                    resultDiv.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = '<p style="color: red;">Hata: ' + error.message + '</p>';
+            }
+        }
+        
+        // Sayfa yüklendiğinde otomatik test et
+        window.onload = function() {
+            testToken();
+        };
+    </script>
+</body>
+</html>
+

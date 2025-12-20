@@ -24,36 +24,65 @@ class Borrow(db.Model):
         self.Durum = 'Aktif'
     
     def to_dict(self, include_book=False, include_user=False):
-        data = {
-            'oduncID': self.OduncID,
-            'kullaniciID': self.KullaniciID,
-            'kitapID': self.KitapID,
-            'oduncAlmaTarihi': self.OduncAlmaTarihi.isoformat() if self.OduncAlmaTarihi else None,
-            'iadeTarihi': self.IadeTarihi.isoformat() if self.IadeTarihi else None,
-            'beklenenIadeTarihi': self.BeklenenIadeTarihi.isoformat() if self.BeklenenIadeTarihi else None,
-            'durum': self.Durum,
-            'notlar': self.Notlar
-        }
-        
-        if include_book and self.book:
-            data['kitap'] = self.book.to_dict()
-        
-        if include_user and self.user:
-            data['kullanici'] = {
-                'ad': self.user.Ad,
-                'soyad': self.user.Soyad,
-                'eposta': self.user.EPosta
+        try:
+            data = {
+                'oduncID': self.OduncID,
+                'kullaniciID': self.KullaniciID,
+                'kitapID': self.KitapID,
+                'oduncAlmaTarihi': self.OduncAlmaTarihi.isoformat() if self.OduncAlmaTarihi else None,
+                'iadeTarihi': self.IadeTarihi.isoformat() if self.IadeTarihi else None,
+                'beklenenIadeTarihi': self.BeklenenIadeTarihi.isoformat() if self.BeklenenIadeTarihi else None,
+                'durum': self.Durum,
+                'notlar': self.Notlar
             }
-        
-        # Gecikme kontrolü
-        if self.Durum == 'Aktif' and datetime.utcnow() > self.BeklenenIadeTarihi:
-            data['gecikmeGunu'] = (datetime.utcnow() - self.BeklenenIadeTarihi).days
-        elif self.Durum == 'IadeEdildi' and self.IadeTarihi and self.IadeTarihi > self.BeklenenIadeTarihi:
-            data['gecikmeGunu'] = (self.IadeTarihi - self.BeklenenIadeTarihi).days
-        else:
-            data['gecikmeGunu'] = 0
-        
-        return data
+            
+            if include_book:
+                try:
+                    # Lazy loading ile book ilişkisini yükle
+                    if self.book:
+                        data['kitap'] = self.book.to_dict()
+                    else:
+                        data['kitap'] = {'baslik': 'Bilinmeyen Kitap', 'kitapID': self.KitapID}
+                except Exception as e:
+                    print(f"Error loading book for borrow {self.OduncID}: {str(e)}")
+                    data['kitap'] = {'baslik': 'Bilinmeyen Kitap', 'kitapID': self.KitapID}
+            
+            if include_user:
+                try:
+                    if self.user:
+                        data['kullanici'] = {
+                            'ad': self.user.Ad,
+                            'soyad': self.user.Soyad,
+                            'eposta': self.user.EPosta
+                        }
+                except Exception as e:
+                    print(f"Error loading user for borrow {self.OduncID}: {str(e)}")
+            
+            # Gecikme kontrolü
+            try:
+                if self.Durum == 'Aktif' and datetime.utcnow() > self.BeklenenIadeTarihi:
+                    data['gecikmeGunu'] = (datetime.utcnow() - self.BeklenenIadeTarihi).days
+                elif self.Durum == 'IadeEdildi' and self.IadeTarihi and self.IadeTarihi > self.BeklenenIadeTarihi:
+                    data['gecikmeGunu'] = (self.IadeTarihi - self.BeklenenIadeTarihi).days
+                else:
+                    data['gecikmeGunu'] = 0
+            except Exception as e:
+                print(f"Error calculating delay for borrow {self.OduncID}: {str(e)}")
+                data['gecikmeGunu'] = 0
+            
+            return data
+        except Exception as e:
+            print(f"Error in to_dict for borrow {self.OduncID}: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            # En azından temel bilgileri döndür
+            return {
+                'oduncID': getattr(self, 'OduncID', None),
+                'kullaniciID': getattr(self, 'KullaniciID', None),
+                'kitapID': getattr(self, 'KitapID', None),
+                'durum': getattr(self, 'Durum', 'Bilinmiyor'),
+                'kitap': {'baslik': 'Bilinmeyen Kitap'}
+            }
     
     def __repr__(self):
         return f'<Borrow ID={self.OduncID} Durum={self.Durum}>'

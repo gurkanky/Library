@@ -58,12 +58,21 @@ def return_book(borrow_id):
 def get_my_borrows():
     """Kullanıcının ödünç aldığı kitapları listele"""
     try:
+        # Debug: Authorization header'ı kontrol et
+        auth_header = request.headers.get('Authorization', None)
+        print(f"[DEBUG] Authorization Header: {auth_header}")
+        
         user_id = get_jwt_identity()
+        print(f"[DEBUG] User ID from token: {user_id}")
+        
         borrows = BorrowService.get_user_borrows(user_id)
         
         return jsonify({'success': True, 'borrows': borrows, 'count': len(borrows)}), 200
         
     except Exception as e:
+        import traceback
+        print(f"Error in get_my_borrows: {str(e)}")
+        print(traceback.format_exc())
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @borrow_bp.route('/all', methods=['GET'])

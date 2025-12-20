@@ -61,10 +61,13 @@ class BorrowService:
         borrow = BorrowRepository.update(borrow)
         
         # Geç iade kontrolü (trigger ile ceza hesaplanacak)
-        # E-posta bildirimi gönder
-        if borrow.IadeTarihi > borrow.BeklenenIadeTarihi:
-            gecikme_gunu = (borrow.IadeTarihi - borrow.BeklenenIadeTarihi).days
-            EmailService.send_late_return_notification(borrow, gecikme_gunu)
+        # E-posta bildirimi gönder (hata olsa bile devam et)
+        try:
+            if borrow.IadeTarihi > borrow.BeklenenIadeTarihi:
+                gecikme_gunu = (borrow.IadeTarihi - borrow.BeklenenIadeTarihi).days
+                EmailService.send_late_return_notification(borrow, gecikme_gunu)
+        except Exception as e:
+            print(f"[BorrowService] E-posta gönderme hatası (devam ediliyor): {str(e)}")
         
         return {
             'success': True,
@@ -96,9 +99,12 @@ class BorrowService:
             if borrow.Durum == 'Aktif':
                 borrow.Durum = 'Gecikmis'
                 BorrowRepository.update(borrow)
-                # E-posta bildirimi
-                gecikme_gunu = (datetime.utcnow() - borrow.BeklenenIadeTarihi).days
-                EmailService.send_overdue_notification(borrow, gecikme_gunu)
+                # E-posta bildirimi (hata olsa bile devam et)
+                try:
+                    gecikme_gunu = (datetime.utcnow() - borrow.BeklenenIadeTarihi).days
+                    EmailService.send_overdue_notification(borrow, gecikme_gunu)
+                except Exception as e:
+                    print(f"[BorrowService] E-posta gönderme hatası (devam ediliyor): {str(e)}")
         
         return {
             'success': True,
