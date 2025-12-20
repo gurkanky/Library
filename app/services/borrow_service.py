@@ -35,6 +35,22 @@ class BorrowService:
         borrow = BorrowRepository.create(borrow)
         
         # Kitap stok güncellemesi trigger ile yapılacak
+
+        # ... (borrow_book fonksiyonunun en altı, return öncesi) ...
+
+        # İSTEĞE BAĞLI: Bilgilendirme Maili
+        try:
+            subject = "Kitap Ödünç Alındı"
+            body = f"Sayın {user.Ad}, '{book.Baslik}' kitabını ödünç aldınız. İyi okumalar."
+            EmailService.send_email(user.EPosta, subject, body)
+        except:
+            pass  # Mail gitmese de işlem başarılı sayılsın
+
+        return {
+            'success': True,
+            'message': 'Kitap ödünç alındı',
+            'borrow': borrow.to_dict(include_book=True)
+        }
         
         return {
             'success': True,
