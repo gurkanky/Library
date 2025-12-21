@@ -115,7 +115,12 @@ const userAPI = {
     async getProfile() { return api.get('/users/profile'); },
     async getPenalties() { return api.get('/users/penalties'); },
     async getDebt() { return api.get('/users/debt'); },
-    async payPenalty(penaltyId) { return api.post(`/users/penalties/${penaltyId}/pay`); }
+    async payPenalty(penaltyId) { return api.post(`/users/penalties/${penaltyId}/pay`); },
+
+    // --- YENİ EKLENEN FAVORİ METODLARI ---
+    async getFavorites() { return api.get('/users/favorites'); },
+    async addFavorite(bookId) { return api.post(`/users/favorites/${bookId}`); },
+    async removeFavorite(bookId) { return api.delete(`/users/favorites/${bookId}`); }
 };
 
 const adminAPI = {

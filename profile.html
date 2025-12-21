@@ -13,7 +13,7 @@
             <a class="navbar-brand" href="/">Kütüphane</a>
             <div class="d-flex">
                 <a href="/books.html" class="btn btn-outline-light me-2">Kitaplar</a>
-                <button onclick="logout()" class="btn btn-danger">Çıkış Yap</button>
+                <button onclick="api.logout()" class="btn btn-danger">Çıkış Yap</button>
             </div>
         </div>
     </nav>
@@ -22,13 +22,13 @@
         <div class="row">
             <div class="col-md-3">
                 <div class="list-group">
-                    <a href="#" class="list-group-item list-group-item-action active" onclick="showTab('info')">
+                    <a href="#" class="list-group-item list-group-item-action active" onclick="showTab('info', event)">
                         <i class="fas fa-user me-2"></i>Kullanıcı Bilgileri
                     </a>
-                    <a href="#" class="list-group-item list-group-item-action" onclick="showTab('favorites')">
+                    <a href="#" class="list-group-item list-group-item-action" onclick="showTab('favorites', event)">
                         <i class="fas fa-heart me-2"></i>Favorilerim
                     </a>
-                    <a href="#" class="list-group-item list-group-item-action" onclick="showTab('security')">
+                    <a href="#" class="list-group-item list-group-item-action" onclick="showTab('security', event)">
                         <i class="fas fa-lock me-2"></i>Güvenlik & Ayarlar
                     </a>
                 </div>
@@ -55,7 +55,8 @@
                         <div class="card-header">Favori Kitaplarım</div>
                         <div class="card-body">
                             <div id="favoritesList" class="row">
-                                </div>
+                                <p class="text-center text-muted">Yükleniyor...</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -91,65 +92,100 @@
     </div>
 
     <script src="/static/js/api.js"></script>
-    <script src="/static/js/token_check.js"></script>
     <script>
         // Sayfa yüklendiğinde çalışacaklar
         document.addEventListener('DOMContentLoaded', async () => {
+            const token = api.getToken();
+            if (!token) {
+                window.location.href = 'login.html';
+                return;
+            }
             await loadUserProfile();
-            await loadFavorites();
         });
 
         // Tab değiştirme fonksiyonu
-        function showTab(tabName) {
+        function showTab(tabName, event) {
+            if(event) event.preventDefault();
+
+            // Tüm içerikleri gizle
             document.querySelectorAll('.content-section').forEach(el => el.classList.add('d-none'));
+            // Tüm menüleri pasif yap
             document.querySelectorAll('.list-group-item').forEach(el => el.classList.remove('active'));
 
-            document.getElementById(tabName + '-tab').classList.remove('d-none');
-            event.currentTarget.classList.add('active');
-        }
+            // Seçileni aktif yap
+            const targetTab = document.getElementById(tabName + '-tab');
+            if(targetTab) {
+                targetTab.classList.remove('d-none');
+                if(event) event.currentTarget.classList.add('active');
 
-        async function loadUserProfile() {
-            const response = await fetchWithAuth('/user/profile');
-            if(response.success) {
-                const u = response.user;
-                document.getElementById('userName').innerText = `${u.Ad} ${u.Soyad}`;
-                document.getElementById('userEmail').innerText = u.EPosta;
-                document.getElementById('userRole').innerText = u.Rol;
-
-                // Borç bilgisini çek (Eğer endpoint varsa)
-                const debtResp = await fetchWithAuth('/user/debt');
-                if(debtResp.success) {
-                    document.getElementById('userDebt').innerText = `${debtResp.total_debt} TL`;
+                // Eğer favoriler sekmesiyse listeyi yükle
+                if (tabName === 'favorites') {
+                    loadFavorites();
                 }
             }
         }
 
-        async function loadFavorites() {
-            const response = await fetchWithAuth('/user/favorites');
-            const container = document.getElementById('favoritesList');
-            container.innerHTML = '';
+        async function loadUserProfile() {
+            try {
+                // api.js'deki userAPI kullanılıyor (URL: /users/profile)
+                const response = await userAPI.getProfile();
+                if(response.success) {
+                    const u = response.user;
+                    document.getElementById('userName').innerText = `${u.ad} ${u.soyad}`;
+                    document.getElementById('userEmail').innerText = u.eposta;
+                    document.getElementById('userRole').innerText = u.rol;
 
-            if(response.success && response.favorites.length > 0) {
-                response.favorites.forEach(fav => {
-                    const book = fav.book;
-                    const html = `
-                        <div class="col-md-6 mb-3">
-                            <div class="card h-100">
-                                <div class="card-body">
-                                    <h5 class="card-title">${book.Baslik}</h5>
-                                    <p class="card-text text-muted">${book.Yazar ? book.Yazar : 'Yazar Bilinmiyor'}</p>
-                                    <button onclick="removeFromFav(${book.KitapID})" class="btn btn-sm btn-danger">
-                                        <i class="fas fa-trash"></i> Kaldır
-                                    </button>
-                                    <a href="/book-detail.html?id=${book.KitapID}" class="btn btn-sm btn-primary">İncele</a>
+                    // Borç bilgisini çek
+                    const debtResp = await userAPI.getDebt();
+                    if(debtResp.success) {
+                        document.getElementById('userDebt').innerText = `${debtResp.total_debt} TL`;
+                    }
+                }
+            } catch (error) {
+                console.error('Profil yükleme hatası:', error);
+            }
+        }
+
+        async function loadFavorites() {
+            const container = document.getElementById('favoritesList');
+            container.innerHTML = '<div class="col-12 text-center"><div class="spinner-border text-primary"></div></div>';
+
+            try {
+                // api.js'deki userAPI.getFavorites kullanılıyor (URL: /users/favorites)
+                const response = await userAPI.getFavorites();
+
+                container.innerHTML = '';
+
+                if(response.success && response.favorites && response.favorites.length > 0) {
+                    response.favorites.forEach(fav => {
+                        const book = fav.kitap;
+                        // Yazarları virgülle birleştir
+                        const yazarlar = book.yazarlar ? book.yazarlar.map(y => `${y.ad} ${y.soyad}`).join(', ') : 'Yazar Bilinmiyor';
+
+                        const html = `
+                            <div class="col-md-6 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h5 class="card-title">${book.baslik}</h5>
+                                        <p class="card-text text-muted small">${yazarlar}</p>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <a href="#" class="text-decoration-none text-info">Detay</a>
+                                            <button onclick="removeFromFav(${book.kitapID})" class="btn btn-sm btn-outline-danger">
+                                                <i class="fas fa-trash"></i> Kaldır
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    `;
-                    container.innerHTML += html;
-                });
-            } else {
-                container.innerHTML = '<p class="text-muted">Henüz favori kitabınız yok.</p>';
+                        `;
+                        container.innerHTML += html;
+                    });
+                } else {
+                    container.innerHTML = '<div class="col-12 alert alert-warning">Henüz favori kitabınız yok.</div>';
+                }
+            } catch (error) {
+                console.error(error);
+                container.innerHTML = '<div class="col-12 alert alert-danger">Favoriler yüklenirken hata oluştu.</div>';
             }
         }
 
@@ -159,14 +195,19 @@
             const oldPass = document.getElementById('oldPass').value;
             const newPass = document.getElementById('newPass').value;
 
-            const response = await fetchWithAuth('/user/change-password', {
-                method: 'POST',
-                body: JSON.stringify({ old_password: oldPass, new_password: newPass })
-            });
+            try {
+                // URL Düzeltildi: /users/change-password (Çoğul)
+                const response = await api.post('/users/change-password', {
+                    old_password: oldPass,
+                    new_password: newPass
+                });
 
-            alert(response.message);
-            if(response.success) {
-                e.target.reset();
+                alert(response.message);
+                if(response.success) {
+                    e.target.reset();
+                }
+            } catch (error) {
+                alert('Hata: ' + error.message);
             }
         });
 
@@ -174,14 +215,17 @@
         async function removeFromFav(bookId) {
             if(!confirm('Bu kitabı favorilerden kaldırmak istediğinize emin misiniz?')) return;
 
-            const response = await fetchWithAuth(`/user/favorites/${bookId}`, {
-                method: 'DELETE'
-            });
+            try {
+                // api.js'deki userAPI.removeFavorite kullanılıyor
+                const response = await userAPI.removeFavorite(bookId);
 
-            if(response.success) {
-                loadFavorites(); // Listeyi yenile
-            } else {
-                alert(response.message);
+                if(response.success) {
+                    loadFavorites(); // Listeyi yenile
+                } else {
+                    alert(response.message);
+                }
+            } catch (error) {
+                alert('Hata: ' + error.message);
             }
         }
 
@@ -189,14 +233,16 @@
         async function deleteAccount() {
             if(!confirm('DİKKAT! Hesabınız kalıcı olarak silinecektir. Emin misiniz?')) return;
 
-            const response = await fetchWithAuth('/user/delete-account', {
-                method: 'DELETE'
-            });
+            try {
+                // URL Düzeltildi: /users/delete-account (Çoğul)
+                const response = await api.delete('/users/delete-account');
 
-            alert(response.message);
-            if(response.success) {
-                localStorage.removeItem('token');
-                window.location.href = '/login.html';
+                alert(response.message);
+                if(response.success) {
+                    api.logout();
+                }
+            } catch (error) {
+                alert('Hata: ' + error.message);
             }
         }
     </script>

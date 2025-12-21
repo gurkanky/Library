@@ -259,24 +259,22 @@
             }
         }
 
-        // --- FAVORİ EKLEME FONKSİYONU (YENİ) ---
-        async function addToFavorites(bookId) {
-            try {
-                // api.js'de generic bir request fonksiyonu kullandığınızı varsayıyorum (fetchWithAuth)
-                const response = await fetchWithAuth(`/user/favorites/${bookId}`, {
-                    method: 'POST'
-                });
+      // --- YENİ: Favoriye Ekleme Fonksiyonu ---
+async function addToFavorites(bookId) {
+    try {
+        // fetchWithAuth yerine userAPI kullanıyoruz
+        const response = await userAPI.addFavorite(bookId);
 
-                if (response.success) {
-                    showAlert('Kitap favorilere eklendi!', 'success');
-                } else {
-                    showAlert(response.message, 'warning');
-                }
-            } catch (error) {
-                console.error('Favori hatası:', error);
-                showAlert('Bir hata oluştu', 'danger');
-            }
+        if (response.success) {
+            showAlert('Kitap favorilere eklendi!', 'success');
+        } else {
+            showAlert(response.message || 'Bir hata oluştu', 'warning');
         }
+    } catch (error) {
+        console.error('Favori hatası:', error);
+        showAlert('Hata: ' + (error.message || 'Bilinmeyen hata'), 'danger');
+    }
+}
 
         async function borrowBook(bookId) {
             if (!confirm('Bu kitabı ödünç almak istediğinize emin misiniz?')) return;

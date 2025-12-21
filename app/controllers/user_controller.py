@@ -142,7 +142,8 @@ def get_user_favorites():
 def toggle_favorite(book_id):
     """Favoriye ekle veya çıkar"""
     try:
-        user_id = get_jwt_identity()
+        # DÜZELTME: Token'dan gelen ID string olabilir, int'e çeviriyoruz.
+        user_id = int(get_jwt_identity())
 
         if request.method == 'POST':
             if UserRepository.add_favorite(user_id, book_id):
@@ -155,4 +156,5 @@ def toggle_favorite(book_id):
             return jsonify({'success': False, 'message': 'Favorilerde bulunamadı'}), 400
 
     except Exception as e:
+        print(f"Favori Hatası: {str(e)}")  # Hatayı terminalde görmek için log ekledik
         return jsonify({'success': False, 'message': str(e)}), 500
