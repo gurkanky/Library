@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kitaplar - Akıllı Kütüphane</title>
     <link rel="stylesheet" href="static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <header>
@@ -15,6 +16,7 @@
                     <li><a href="dashboard.html">Dashboard</a></li>
                     <li><a href="books.html">Kitaplar</a></li>
                     <li><a href="my-books.html">Ödünç Kitaplarım</a></li>
+                    <li><a href="profile.html">Hesabım</a></li>
                     <li class="admin-link hidden"><a href="admin.html">Admin Panel</a></li>
                     <li><a href="#" onclick="logout(); return false;">Çıkış</a></li>
                 </ul>
@@ -113,7 +115,7 @@
             </div>
 
             <div id="reviewsList" style="max-height: 400px; overflow-y: auto;">
-                </div>
+            </div>
         </div>
     </div>
 
@@ -123,7 +125,6 @@
         let categories = [];
 
         document.addEventListener('DOMContentLoaded', async function() {
-            // Token kontrolü
             const token = api.getToken();
             if (!token) {
                 window.location.href = 'login.html';
@@ -144,7 +145,6 @@
             try {
                 const result = await categoryAPI.getAll();
                 categories = result.categories;
-
                 const categoryFilter = document.getElementById('categoryFilter');
                 const bookKategori = document.getElementById('bookKategori');
 
@@ -177,10 +177,8 @@
             }
         }
 
-        // --- KİTAPLARI LİSTELEME FONKSİYONU ---
         function displayBooks(books) {
             const container = document.getElementById('booksContainer');
-
             if (books.length === 0) {
                 container.innerHTML = '<p>Kitap bulunamadı.</p>';
                 return;
@@ -193,34 +191,40 @@
                 <div class="grid">
                     ${books.map(book => {
                         const isAvailable = book.mevcutKopyaSayisi > 0;
-
-                        // BUTON MANTIĞI:
                         let actionButtons = '';
 
-                        // 1. Admin Butonları (Düzenle/Sil)
                         if (isAdmin) {
                             actionButtons = `
                                 <button onclick="editBook(${book.kitapID})" class="btn btn-warning">Düzenle</button>
                                 <button onclick="deleteBook(${book.kitapID})" class="btn btn-danger">Sil</button>
                             `;
-                        }
-                        // 2. Üye Butonları (Ödünç Al veya Rezerve Et)
-                        else {
+                        } else {
                             if (isAvailable) {
                                 actionButtons = `<button onclick="borrowBook(${book.kitapID})" class="btn btn-primary">Ödünç Al</button>`;
                             } else {
-                                actionButtons = `<button onclick="reserveBook(${book.kitapID})" class="btn btn-warning">Sıraya Gir (Rezerve Et)</button>`;
+                                actionButtons = `<button onclick="reserveBook(${book.kitapID})" class="btn btn-warning">Sıraya Gir</button>`;
                             }
                         }
 
-                        // 3. Herkes için Yorum Butonu
+                        // Yorum Butonu
                         actionButtons += `
                             <button onclick="openReviews(${book.kitapID}, '${book.baslik}')" class="btn btn-info" style="background-color: #17a2b8; color: white;">Yorumlar</button>
                         `;
 
+                        // FAVORİ BUTONU (YENİ)
+                        let favButton = `
+                            <button onclick="addToFavorites(${book.kitapID})" class="btn btn-outline-danger" title="Favorilere Ekle" style="margin-top:5px; border-color: #dc3545; color: #dc3545; background: white;">
+                                <i class="fas fa-heart"></i>
+                            </button>
+                        `;
+
                         return `
                         <div class="book-card">
-                            <h3>${book.baslik}</h3>
+                            <div style="display:flex; justify-content:space-between; align-items:start;">
+                                <h3>${book.baslik}</h3>
+                                ${favButton}
+                            </div>
+
                             <p class="author">${book.yazarlar && book.yazarlar.length > 0
                                 ? book.yazarlar.map(y => `${y.ad} ${y.soyad}`).join(', ')
                                 : 'Yazar bilgisi yok'}</p>
@@ -229,7 +233,7 @@
                             <p><strong>Mevcut Kopya:</strong> ${book.mevcutKopyaSayisi}</p>
 
                             <span class="status ${isAvailable ? 'status-available' : 'status-unavailable'}">
-                                ${isAvailable ? 'Müsait' : 'Tükendi (Sıra Var)'}
+                                ${isAvailable ? 'Müsait' : 'Tükendi'}
                             </span>
 
                             <div style="margin-top: 15px; display: flex; gap: 5px; flex-wrap: wrap;">
@@ -244,21 +248,35 @@
         async function searchBooks() {
             const title = document.getElementById('searchInput').value;
             const categoryId = document.getElementById('categoryFilter').value;
-
             try {
                 const params = { include_authors: 'true' };
                 if (title) params.title = title;
                 if (categoryId) params.category_id = categoryId;
-
                 const result = await bookAPI.getAll(params);
                 displayBooks(result.books);
             } catch (error) {
-                console.error('Arama hatası:', error);
-                showAlert('Arama yapılırken bir hata oluştu', 'danger');
+                showAlert('Arama hatası', 'danger');
             }
         }
 
-        // --- İŞLEM FONKSİYONLARI ---
+        // --- FAVORİ EKLEME FONKSİYONU (YENİ) ---
+        async function addToFavorites(bookId) {
+            try {
+                // api.js'de generic bir request fonksiyonu kullandığınızı varsayıyorum (fetchWithAuth)
+                const response = await fetchWithAuth(`/user/favorites/${bookId}`, {
+                    method: 'POST'
+                });
+
+                if (response.success) {
+                    showAlert('Kitap favorilere eklendi!', 'success');
+                } else {
+                    showAlert(response.message, 'warning');
+                }
+            } catch (error) {
+                console.error('Favori hatası:', error);
+                showAlert('Bir hata oluştu', 'danger');
+            }
+        }
 
         async function borrowBook(bookId) {
             if (!confirm('Bu kitabı ödünç almak istediğinize emin misiniz?')) return;
@@ -274,18 +292,16 @@
         }
 
         async function reserveBook(bookId) {
-            if (!confirm('Bu kitap için sıraya girmek (rezervasyon yapmak) istiyor musunuz?')) return;
+            if (!confirm('Sıraya girmek istiyor musunuz?')) return;
             try {
                 const result = await reservationAPI.create({ kitapID: bookId });
                 if (result.success) {
-                    showAlert('Başarıyla sıraya girdiniz! Kitap geldiğinde haber verilecek.', 'success');
+                    showAlert('Başarıyla sıraya girdiniz!', 'success');
                 }
             } catch (error) {
-                showAlert(error.message || 'Rezervasyon hatası', 'danger');
+                showAlert(error.message, 'danger');
             }
         }
-
-        // --- YORUM SİSTEMİ FONKSİYONLARI ---
 
         async function openReviews(bookId, bookTitle) {
             document.getElementById('reviewModal').style.display = 'block';
@@ -297,59 +313,48 @@
         async function loadReviews(bookId) {
             const listContainer = document.getElementById('reviewsList');
             listContainer.innerHTML = '<p>Yükleniyor...</p>';
-
             try {
                 const result = await reviewAPI.getByBook(bookId);
                 const currentUser = api.getUser();
-
                 if (result.success && result.reviews.length > 0) {
                     listContainer.innerHTML = result.reviews.map(review => {
-                        // Silme butonu mantığı: Kendi yorumuysa VEYA Admin ise
                         let deleteBtn = '';
-                        if (currentUser) {
-                            if (review.kullaniciID === currentUser.kullaniciID || currentUser.rol === 'Admin') {
-                                deleteBtn = `<button onclick="deleteReview(${review.yorumID}, ${bookId})" class="btn btn-danger btn-sm" style="float:right; font-size:12px; padding:2px 6px;">Sil</button>`;
-                            }
+                        if (currentUser && (review.kullaniciID === currentUser.kullaniciID || currentUser.rol === 'Admin')) {
+                            deleteBtn = `<button onclick="deleteReview(${review.yorumID}, ${bookId})" class="btn btn-danger btn-sm" style="float:right;">Sil</button>`;
                         }
-
                         return `
                         <div style="border-bottom: 1px solid #eee; padding: 10px 0;">
                             <div style="display: flex; justify-content: space-between;">
                                 <strong>${review.kullaniciAdi}</strong>
                                 <span style="color: #f39c12;">${'★'.repeat(review.puan)}${'☆'.repeat(5-review.puan)}</span>
                             </div>
-                            <p style="margin: 5px 0;">${review.yorum}</p>
-                            <small style="color: #888;">${review.tarih}</small>
+                            <p>${review.yorum}</p>
+                            <small style="color:#888;">${review.tarih}</small>
                             ${deleteBtn}
                         </div>
                         `;
                     }).join('');
                 } else {
-                    listContainer.innerHTML = '<p class="text-center" style="padding:20px;">Henüz yorum yok. İlk yorumu sen yap!</p>';
+                    listContainer.innerHTML = '<p class="text-center" style="padding:20px;">Henüz yorum yok.</p>';
                 }
             } catch (error) {
-                listContainer.innerHTML = '<p style="color:red">Yorumlar yüklenirken hata oluştu.</p>';
+                listContainer.innerHTML = '<p style="color:red">Hata oluştu.</p>';
             }
         }
 
-        // Yorum Formu Submit
         document.getElementById('addReviewForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const bookId = document.getElementById('reviewBookId').value;
-            const rating = document.getElementById('reviewRating').value;
-            const comment = document.getElementById('reviewText').value;
-
             try {
                 const result = await reviewAPI.add({
                     kitapID: parseInt(bookId),
-                    puan: parseInt(rating),
-                    yorum: comment
+                    puan: parseInt(document.getElementById('reviewRating').value),
+                    yorum: document.getElementById('reviewText').value
                 });
-
                 if (result.success) {
                     alert('Yorumunuz eklendi!');
-                    document.getElementById('reviewText').value = ''; // Temizle
-                    await loadReviews(bookId); // Yenile
+                    document.getElementById('reviewText').value = '';
+                    await loadReviews(bookId);
                 } else {
                     alert(result.message);
                 }
@@ -358,39 +363,18 @@
             }
         });
 
-        // Yorum Silme
         async function deleteReview(reviewId, bookId) {
-            if(!confirm('Bu yorumu silmek istediğinize emin misiniz?')) return;
+            if(!confirm('Silmek istiyor musunuz?')) return;
             try {
                 const result = await reviewAPI.delete(reviewId);
-                if(result.success) {
-                    await loadReviews(bookId);
-                } else {
-                    alert(result.message);
-                }
-            } catch (error) {
-                alert('Silme hatası: ' + error.message);
-            }
+                if(result.success) await loadReviews(bookId);
+            } catch(e) { alert(e.message); }
         }
 
-        // --- ADMIN FONKSİYONLARI ---
+        function showAddBookModal() { document.getElementById('addBookModal').style.display = 'block'; }
+        function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+        window.onclick = function(event) { if (event.target.classList.contains('modal')) event.target.style.display = 'none'; }
 
-        function showAddBookModal() {
-            document.getElementById('addBookModal').style.display = 'block';
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).style.display = 'none';
-        }
-
-        // Modal dışına tıklanınca kapat
-        window.onclick = function(event) {
-            if (event.target.classList.contains('modal')) {
-                event.target.style.display = 'none';
-            }
-        }
-
-        // Kitap Ekleme Submit
         document.getElementById('addBookForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const bookData = {
@@ -402,7 +386,6 @@
                 yayinEvi: document.getElementById('bookYayinEvi').value,
                 aciklama: document.getElementById('bookAciklama').value
             };
-
             try {
                 const result = await bookAPI.create(bookData);
                 if (result.success) {
@@ -411,22 +394,15 @@
                     document.getElementById('addBookForm').reset();
                     await loadBooks();
                 }
-            } catch (error) {
-                showAlert(error.message || 'Hata oluştu', 'danger');
-            }
+            } catch (error) { showAlert(error.message, 'danger'); }
         });
 
         async function deleteBook(bookId) {
-            if (!confirm('Bu kitabı silmek istediğinize emin misiniz?')) return;
+            if (!confirm('Silmek istediğinize emin misiniz?')) return;
             try {
                 const result = await bookAPI.delete(bookId);
-                if (result.success) {
-                    showAlert('Kitap silindi!', 'success');
-                    await loadBooks();
-                }
-            } catch (error) {
-                showAlert(error.message || 'Hata oluştu', 'danger');
-            }
+                if (result.success) { showAlert('Silindi!', 'success'); await loadBooks(); }
+            } catch (error) { showAlert(error.message, 'danger'); }
         }
     </script>
 </body>

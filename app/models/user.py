@@ -18,10 +18,10 @@ class User(db.Model):
     OlusturmaTarihi = db.Column(db.DateTime, default=datetime.utcnow)
 
     # İlişkiler
-    # Backref çakışmalarını önlemek için diğer modellerden tanımlanan ilişkileri burada tekrar etmiyoruz.
-    # Ancak User üzerinden erişim sağlamak için ilişkileri burada tanımlayabiliriz.
     borrows = db.relationship('Borrow', backref='user', lazy=True, cascade='all, delete-orphan')
     penalties = db.relationship('Penalty', backref='user', lazy=True, cascade='all, delete-orphan')
+    # Favoriler ilişkisi eklendi
+    favorites = db.relationship('Favorite', backref='user', lazy=True, cascade='all, delete-orphan')
 
     def __init__(self, ad, soyad, eposta, sifre, rol='Uye', telefon=None, adres=None):
         self.Ad = ad
@@ -40,12 +40,10 @@ class User(db.Model):
 
     def check_password(self, password):
         """Girilen şifrenin doğruluğunu kontrol eder."""
-        # Eğer veritabanındaki şifre hash'lenmemişse (eski kayıtlar)
+        # Eğer veritabanındaki şifre hash'lenmemişse (eski kayıtlar için)
         if not self.Sifre.startswith('pbkdf2:') and not self.Sifre.startswith('scrypt:'):
-            # Geçici: Düz metin şifreleri de kabul et (Geliştirme aşaması için)
             if self.Sifre == password:
-                # Giriş başarılıysa şifreyi güncelle (Opsiyonel)
-                self.set_password(password)
+                self.set_password(password) # Güncelle
                 db.session.commit()
                 return True
             return False
