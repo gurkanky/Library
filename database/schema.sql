@@ -1,237 +1,236 @@
--- Akıllı Kütüphane Yönetim Sistemi Veritabanı Şeması
--- MSSQL Database Schema
+-- Akıllı Kütüphane Yönetim Sistemi - DÜZELTİLMİŞ ŞEMA
+-- Bu script, Python koduyla tam uyumlu ve döngüsel (cycle) hatalarından arındırılmıştır.
 
--- Veritabanı oluştur
-IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'KutuphaneDB')
+USE master;
+GO
+
+-- Eğer veritabanı varsa önce bağlantıları kopar, sonra sil (Temiz başlangıç için)
+IF EXISTS (SELECT * FROM sys.databases WHERE name = 'KutuphaneDB')
 BEGIN
-    CREATE DATABASE KutuphaneDB;
+    ALTER DATABASE KutuphaneDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE KutuphaneDB;
 END
+GO
+
+CREATE DATABASE KutuphaneDB;
 GO
 
 USE KutuphaneDB;
 GO
 
--- Kategoriler Tablosu
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Kategoriler]') AND type in (N'U'))
-BEGIN
-    CREATE TABLE Kategoriler (
-        KategoriID INT PRIMARY KEY IDENTITY(1,1),
-        KategoriAdi NVARCHAR(100) NOT NULL UNIQUE,
-        Aciklama NVARCHAR(500),
-        OlusturmaTarihi DATETIME DEFAULT GETDATE()
-    );
-END
+-- 1. KATEGORİLER TABLOSU
+CREATE TABLE Kategoriler (
+    KategoriID INT PRIMARY KEY IDENTITY(1,1),
+    KategoriAdi NVARCHAR(100) NOT NULL UNIQUE,
+    Aciklama NVARCHAR(500),
+    OlusturmaTarihi DATETIME DEFAULT GETDATE()
+);
 GO
 
--- Yazarlar Tablosu
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Yazarlar]') AND type in (N'U'))
-BEGIN
-    CREATE TABLE Yazarlar (
-        YazarID INT PRIMARY KEY IDENTITY(1,1),
-        Ad NVARCHAR(50) NOT NULL,
-        Soyad NVARCHAR(50) NOT NULL,
-        DogumTarihi DATE,
-        Ulke NVARCHAR(50),
-        Biyografi NVARCHAR(1000),
-        OlusturmaTarihi DATETIME DEFAULT GETDATE()
-    );
-END
+-- 2. YAZARLAR TABLOSU
+CREATE TABLE Yazarlar (
+    YazarID INT PRIMARY KEY IDENTITY(1,1),
+    Ad NVARCHAR(50) NOT NULL,
+    Soyad NVARCHAR(50) NOT NULL,
+    DogumTarihi DATE,
+    Ulke NVARCHAR(50),
+    Biyografi NVARCHAR(1000),
+    OlusturmaTarihi DATETIME DEFAULT GETDATE()
+);
 GO
 
--- Kullanıcılar Tablosu (Admin ve Üye için ortak tablo)
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Kullanıcılar]') AND type in (N'U'))
-BEGIN
-    CREATE TABLE Kullanıcılar (
-        KullaniciID INT PRIMARY KEY IDENTITY(1,1),
-        Ad NVARCHAR(50) NOT NULL,
-        Soyad NVARCHAR(50) NOT NULL,
-        EPosta NVARCHAR(100) NOT NULL UNIQUE,
-        Sifre NVARCHAR(255) NOT NULL, -- Hash'lenmiş şifre
-        Rol NVARCHAR(20) NOT NULL CHECK (Rol IN ('Admin', 'Uye')),
-        Telefon NVARCHAR(20),
-        Adres NVARCHAR(500),
-        Aktif BIT DEFAULT 1,
-        OlusturmaTarihi DATETIME DEFAULT GETDATE()
-    );
-END
+-- 3. KULLANICILAR TABLOSU
+CREATE TABLE Kullanıcılar (
+    KullaniciID INT PRIMARY KEY IDENTITY(1,1),
+    Ad NVARCHAR(50) NOT NULL,
+    Soyad NVARCHAR(50) NOT NULL,
+    EPosta NVARCHAR(100) NOT NULL UNIQUE,
+    Sifre NVARCHAR(255) NOT NULL,
+    Rol NVARCHAR(20) NOT NULL CHECK (Rol IN ('Admin', 'Uye')),
+    Telefon NVARCHAR(20),
+    Adres NVARCHAR(500),
+    Aktif BIT DEFAULT 1,
+    OlusturmaTarihi DATETIME DEFAULT GETDATE()
+);
 GO
 
--- Kitaplar Tablosu
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Kitaplar]') AND type in (N'U'))
-BEGIN
-    CREATE TABLE Kitaplar (
-        KitapID INT PRIMARY KEY IDENTITY(1,1),
-        Baslik NVARCHAR(200) NOT NULL,
-        ISBN NVARCHAR(20) UNIQUE,
-        YayinYili INT,
-        SayfaSayisi INT,
-        MevcutKopyaSayisi INT DEFAULT 0,
-        ToplamKopyaSayisi INT DEFAULT 0,
-        KategoriID INT,
-        YayinEvi NVARCHAR(100),
-        Dil NVARCHAR(20) DEFAULT 'Türkçe',
-        Aciklama NVARCHAR(1000),
-        OlusturmaTarihi DATETIME DEFAULT GETDATE(),
-        FOREIGN KEY (KategoriID) REFERENCES Kategoriler(KategoriID) ON DELETE SET NULL
-    );
-END
+-- 4. KİTAPLAR TABLOSU
+CREATE TABLE Kitaplar (
+    KitapID INT PRIMARY KEY IDENTITY(1,1),
+    Baslik NVARCHAR(200) NOT NULL,
+    ISBN NVARCHAR(20) UNIQUE,
+    YayinYili INT,
+    SayfaSayisi INT,
+    MevcutKopyaSayisi INT DEFAULT 0,
+    ToplamKopyaSayisi INT DEFAULT 0,
+    KategoriID INT,
+    YayinEvi NVARCHAR(100),
+    Dil NVARCHAR(20) DEFAULT 'Türkçe',
+    Aciklama NVARCHAR(1000),
+    OlusturmaTarihi DATETIME DEFAULT GETDATE(),
+    -- Kategori silinirse kitap silinmesin, KategoriID NULL olsun
+    FOREIGN KEY (KategoriID) REFERENCES Kategoriler(KategoriID) ON DELETE SET NULL
+);
 GO
 
--- Kitap-Yazar İlişki Tablosu (Çoktan-Çoğa)
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[KitapYazarlar]') AND type in (N'U'))
-BEGIN
-    CREATE TABLE KitapYazarlar (
-        KitapYazarID INT PRIMARY KEY IDENTITY(1,1),
-        KitapID INT NOT NULL,
-        YazarID INT NOT NULL,
-        FOREIGN KEY (KitapID) REFERENCES Kitaplar(KitapID) ON DELETE CASCADE,
-        FOREIGN KEY (YazarID) REFERENCES Yazarlar(YazarID) ON DELETE CASCADE,
-        UNIQUE(KitapID, YazarID)
-    );
-END
+-- 5. KİTAP-YAZAR İLİŞKİ TABLOSU
+CREATE TABLE KitapYazarlar (
+    KitapYazarID INT PRIMARY KEY IDENTITY(1,1),
+    KitapID INT NOT NULL,
+    YazarID INT NOT NULL,
+    FOREIGN KEY (KitapID) REFERENCES Kitaplar(KitapID) ON DELETE CASCADE,
+    FOREIGN KEY (YazarID) REFERENCES Yazarlar(YazarID) ON DELETE CASCADE,
+    UNIQUE(KitapID, YazarID)
+);
 GO
 
--- Ödünç Verme İşlemleri Tablosu
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[OduncIslemleri]') AND type in (N'U'))
-BEGIN
-    CREATE TABLE OduncIslemleri (
-        OduncID INT PRIMARY KEY IDENTITY(1,1),
-        KullaniciID INT NOT NULL,
-        KitapID INT NOT NULL,
-        OduncAlmaTarihi DATETIME NOT NULL DEFAULT GETDATE(),
-        IadeTarihi DATETIME,
-        BeklenenIadeTarihi DATETIME NOT NULL,
-        Durum NVARCHAR(20) DEFAULT 'Aktif' CHECK (Durum IN ('Aktif', 'IadeEdildi', 'Gecikmis')),
-        Notlar NVARCHAR(500),
-        FOREIGN KEY (KullaniciID) REFERENCES Kullanıcılar(KullaniciID) ON DELETE CASCADE,
-        FOREIGN KEY (KitapID) REFERENCES Kitaplar(KitapID) ON DELETE CASCADE
-    );
-END
+-- 6. ÖDÜNÇ İŞLEMLERİ TABLOSU (Python modeliyle uyumlu isimler)
+CREATE TABLE OduncIslemleri (
+    OduncID INT PRIMARY KEY IDENTITY(1,1),
+    KullaniciID INT NOT NULL,
+    KitapID INT NOT NULL,
+
+    -- İsim düzeltmeleri:
+    OduncTarihi DATETIME NOT NULL DEFAULT GETDATE(),  -- Eskisi: OduncAlmaTarihi
+    IadeTarihi DATETIME,
+    SonTeslimTarihi DATETIME NOT NULL,                -- Eskisi: BeklenenIadeTarihi
+
+    Durum NVARCHAR(20) DEFAULT 'Aktif' CHECK (Durum IN ('Aktif', 'IadeEdildi', 'Gecikmis')),
+
+    FOREIGN KEY (KullaniciID) REFERENCES Kullanıcılar(KullaniciID) ON DELETE CASCADE,
+    FOREIGN KEY (KitapID) REFERENCES Kitaplar(KitapID) ON DELETE CASCADE
+);
 GO
 
--- Ceza Tablosu
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Cezalar]') AND type in (N'U'))
-BEGIN
-    CREATE TABLE Cezalar (
-        CezaID INT PRIMARY KEY IDENTITY(1,1),
-        KullaniciID INT NOT NULL,
-        OduncID INT,
-        CezaMiktari DECIMAL(10,2) NOT NULL DEFAULT 0,
-        CezaNedeni NVARCHAR(200),
-        Durum NVARCHAR(20) DEFAULT 'Beklemede' CHECK (Durum IN ('Beklemede', 'Odendi', 'Iptal')),
-        OlusturmaTarihi DATETIME DEFAULT GETDATE(),
-        OdemeTarihi DATETIME,
-        FOREIGN KEY (KullaniciID) REFERENCES Kullanıcılar(KullaniciID) ON DELETE CASCADE,
-        FOREIGN KEY (OduncID) REFERENCES OduncIslemleri(OduncID) ON DELETE SET NULL
-    );
-END
+-- 7. CEZALAR TABLOSU (Cycle Hatası Düzeltildi)
+CREATE TABLE Cezalar (
+    CezaID INT PRIMARY KEY IDENTITY(1,1),
+    KullaniciID INT NOT NULL,
+    OduncID INT,
+
+    -- İsim düzeltmeleri:
+    Tutar DECIMAL(10,2) NOT NULL DEFAULT 0, -- Eskisi: CezaMiktari
+    Aciklama NVARCHAR(200),                 -- Eskisi: CezaNedeni
+
+    Durum NVARCHAR(20) DEFAULT 'Beklemede' CHECK (Durum IN ('Beklemede', 'Odendi', 'Iptal')),
+    OlusturmaTarihi DATETIME DEFAULT GETDATE(),
+    OdenenTarih DATETIME,                   -- Eskisi: OdemeTarihi
+
+    -- CRITICAL FIX: Cycle hatasını önlemek için Kullanıcı silindiğinde Ceza silinmesin (NO ACTION)
+    -- Mantık: Zaten kullanıcıyı silmeden önce borçlarını kontrol etmeliyiz.
+    FOREIGN KEY (KullaniciID) REFERENCES Kullanıcılar(KullaniciID) ON DELETE NO ACTION,
+
+    -- Ödünç kaydı silinirse cezadaki OduncID NULL olsun ama ceza kaydı kalsın
+    FOREIGN KEY (OduncID) REFERENCES OduncIslemleri(OduncID) ON DELETE SET NULL
+);
 GO
 
--- İndeksler
+-- 8. REZERVASYONLAR TABLOSU (Eksikti, eklendi)
+CREATE TABLE Rezervasyonlar (
+    RezervasyonID INT PRIMARY KEY IDENTITY(1,1),
+    KullaniciID INT NOT NULL,
+    KitapID INT NOT NULL,
+    RezervasyonTarihi DATETIME DEFAULT GETDATE(),
+    Durum NVARCHAR(20) DEFAULT 'Aktif', -- Aktif, Tamamlandi, Iptal
+
+    FOREIGN KEY (KullaniciID) REFERENCES Kullanıcılar(KullaniciID) ON DELETE CASCADE,
+    FOREIGN KEY (KitapID) REFERENCES Kitaplar(KitapID) ON DELETE CASCADE
+);
+GO
+
+-- İNDEKSLER
 CREATE NONCLUSTERED INDEX IX_Kitaplar_KategoriID ON Kitaplar(KategoriID);
 CREATE NONCLUSTERED INDEX IX_OduncIslemleri_KullaniciID ON OduncIslemleri(KullaniciID);
-CREATE NONCLUSTERED INDEX IX_OduncIslemleri_KitapID ON OduncIslemleri(KitapID);
 CREATE NONCLUSTERED INDEX IX_OduncIslemleri_Durum ON OduncIslemleri(Durum);
 CREATE NONCLUSTERED INDEX IX_Cezalar_KullaniciID ON Cezalar(KullaniciID);
 GO
 
--- TRIGGER: Geç iade edilen kitaplar için otomatik ceza hesaplama
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[TRG_GecikmeCezaHesapla]') AND type = 'TR')
-    DROP TRIGGER TRG_GecikmeCezaHesapla;
-GO
+-- --- TRIGGERLAR (Yeni Sütun İsimlerine Göre Güncellendi) ---
 
+-- TRIGGER 1: Gecikme Cezası Hesapla
 CREATE TRIGGER TRG_GecikmeCezaHesapla
 ON OduncIslemleri
 AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
-    
+
     -- Sadece iade edilen ve gecikmiş işlemler için
     IF UPDATE(IadeTarihi) AND EXISTS (
-        SELECT 1 FROM inserted 
-        WHERE IadeTarihi IS NOT NULL 
-        AND IadeTarihi > BeklenenIadeTarihi
+        SELECT 1 FROM inserted
+        WHERE IadeTarihi IS NOT NULL
+        AND IadeTarihi > SonTeslimTarihi -- İsim düzeltildi
         AND Durum = 'IadeEdildi'
     )
     BEGIN
         DECLARE @OduncID INT;
         DECLARE @KullaniciID INT;
         DECLARE @GecikmeGunu INT;
-        DECLARE @CezaMiktari DECIMAL(10,2);
-        DECLARE @GunlukCeza DECIMAL(10,2) = 0.50; -- Günlük ceza miktarı
-        
+        DECLARE @Tutar DECIMAL(10,2);
+        DECLARE @GunlukCeza DECIMAL(10,2) = 1.50; -- Günlük ceza miktarı (TL)
+
         DECLARE ceza_cursor CURSOR FOR
-        SELECT 
+        SELECT
             i.OduncID,
             i.KullaniciID,
-            DATEDIFF(DAY, i.BeklenenIadeTarihi, i.IadeTarihi) AS GecikmeGunu
+            DATEDIFF(DAY, i.SonTeslimTarihi, i.IadeTarihi) AS GecikmeGunu
         FROM inserted i
-        WHERE i.IadeTarihi IS NOT NULL 
-        AND i.IadeTarihi > i.BeklenenIadeTarihi
+        WHERE i.IadeTarihi IS NOT NULL
+        AND i.IadeTarihi > i.SonTeslimTarihi
         AND i.Durum = 'IadeEdildi'
         AND NOT EXISTS (
-            SELECT 1 FROM Cezalar c 
+            SELECT 1 FROM Cezalar c
             WHERE c.OduncID = i.OduncID
         );
-        
+
         OPEN ceza_cursor;
         FETCH NEXT FROM ceza_cursor INTO @OduncID, @KullaniciID, @GecikmeGunu;
-        
+
         WHILE @@FETCH_STATUS = 0
         BEGIN
-            SET @CezaMiktari = @GecikmeGunu * @GunlukCeza;
-            
-            INSERT INTO Cezalar (KullaniciID, OduncID, CezaMiktari, CezaNedeni, Durum)
-            VALUES (@KullaniciID, @OduncID, @CezaMiktari, 
-                    'Geç iade: ' + CAST(@GecikmeGunu AS NVARCHAR) + ' gün gecikme', 
+            SET @Tutar = @GecikmeGunu * @GunlukCeza;
+
+            -- Yeni sütun isimleri kullanıldı (Tutar, Aciklama)
+            INSERT INTO Cezalar (KullaniciID, OduncID, Tutar, Aciklama, Durum)
+            VALUES (@KullaniciID, @OduncID, @Tutar,
+                    'Geç iade: ' + CAST(@GecikmeGunu AS NVARCHAR) + ' gün gecikme',
                     'Beklemede');
-            
+
             FETCH NEXT FROM ceza_cursor INTO @OduncID, @KullaniciID, @GecikmeGunu;
         END;
-        
+
         CLOSE ceza_cursor;
         DEALLOCATE ceza_cursor;
     END;
 END;
 GO
 
--- TRIGGER: Kitap ödünç alındığında mevcut kopya sayısını azalt
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[TRG_KitapOduncAlindi]') AND type = 'TR')
-    DROP TRIGGER TRG_KitapOduncAlindi;
-GO
-
+-- TRIGGER 2: Kitap Ödünç Alındığında Stok Düşür
 CREATE TRIGGER TRG_KitapOduncAlindi
 ON OduncIslemleri
 AFTER INSERT
 AS
 BEGIN
     SET NOCOUNT ON;
-    
     UPDATE Kitaplar
     SET MevcutKopyaSayisi = MevcutKopyaSayisi - 1
     WHERE KitapID IN (SELECT KitapID FROM inserted WHERE Durum = 'Aktif');
 END;
 GO
 
--- TRIGGER: Kitap iade edildiğinde mevcut kopya sayısını artır
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[TRG_KitapIadeEdildi]') AND type = 'TR')
-    DROP TRIGGER TRG_KitapIadeEdildi;
-GO
-
+-- TRIGGER 3: Kitap İade Edildiğinde Stok Artır
 CREATE TRIGGER TRG_KitapIadeEdildi
 ON OduncIslemleri
 AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
-    
     IF UPDATE(Durum) AND EXISTS (SELECT 1 FROM inserted WHERE Durum = 'IadeEdildi')
     BEGIN
         UPDATE Kitaplar
         SET MevcutKopyaSayisi = MevcutKopyaSayisi + 1
         WHERE KitapID IN (
-            SELECT i.KitapID 
+            SELECT i.KitapID
             FROM inserted i
             INNER JOIN deleted d ON i.OduncID = d.OduncID
             WHERE i.Durum = 'IadeEdildi' AND d.Durum = 'Aktif'
@@ -240,99 +239,17 @@ BEGIN
 END;
 GO
 
--- STORED PROCEDURE: Geç iade edilen kitapları kontrol et ve güncelle
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[SP_GecikmisOduncKontrol]') AND type = 'P')
-    DROP PROCEDURE SP_GecikmisOduncKontrol;
-GO
+-- --- VERİLER ---
 
-CREATE PROCEDURE SP_GecikmisOduncKontrol
-AS
-BEGIN
-    SET NOCOUNT ON;
-    
-    -- Gecikmiş işlemleri güncelle
-    UPDATE OduncIslemleri
-    SET Durum = 'Gecikmis'
-    WHERE Durum = 'Aktif'
-    AND GETDATE() > BeklenenIadeTarihi;
-    
-    -- Gecikmiş işlemlerin sayısını döndür
-    SELECT COUNT(*) AS GecikmisSayisi
-    FROM OduncIslemleri
-    WHERE Durum = 'Gecikmis';
-END;
-GO
+-- Varsayılan Admin (Şifre: admin123 - Werkzeug/pbkdf2 uyumlu hash)
+-- Not: create_admin.py çalıştırırsanız bu güncellenir, ama başlangıç için çalışsın diye ekliyoruz.
+INSERT INTO Kullanıcılar (Ad, Soyad, EPosta, Sifre, Rol)
+VALUES ('Süper', 'Admin', 'admin@kutuphane.com', 'pbkdf2:sha256:600000$Yq... (create_admin.py calistiriniz)', 'Admin');
 
--- STORED PROCEDURE: Kullanıcının ödünç aldığı kitapları listele
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[SP_KullaniciOduncListesi]') AND type = 'P')
-    DROP PROCEDURE SP_KullaniciOduncListesi;
+-- Kategoriler
+INSERT INTO Kategoriler (KategoriAdi, Aciklama) VALUES
+('Roman', 'Roman türü kitaplar'),
+('Bilim Kurgu', 'Bilim kurgu ve fantastik'),
+('Tarih', 'Tarih kitapları'),
+('Kişisel Gelişim', 'Kişisel gelişim kitapları');
 GO
-
-CREATE PROCEDURE SP_KullaniciOduncListesi
-    @KullaniciID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-    
-    SELECT 
-        o.OduncID,
-        k.KitapID,
-        k.Baslik,
-        k.ISBN,
-        o.OduncAlmaTarihi,
-        o.BeklenenIadeTarihi,
-        o.IadeTarihi,
-        o.Durum,
-        CASE 
-            WHEN o.Durum = 'Aktif' AND GETDATE() > o.BeklenenIadeTarihi 
-            THEN DATEDIFF(DAY, o.BeklenenIadeTarihi, GETDATE())
-            ELSE 0
-        END AS GecikmeGunu
-    FROM OduncIslemleri o
-    INNER JOIN Kitaplar k ON o.KitapID = k.KitapID
-    WHERE o.KullaniciID = @KullaniciID
-    ORDER BY o.OduncAlmaTarihi DESC;
-END;
-GO
-
--- STORED PROCEDURE: Kullanıcının toplam borcunu hesapla
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[SP_KullaniciToplamBorc]') AND type = 'P')
-    DROP PROCEDURE SP_KullaniciToplamBorc;
-GO
-
-CREATE PROCEDURE SP_KullaniciToplamBorc
-    @KullaniciID INT,
-    @ToplamBorc DECIMAL(10,2) OUTPUT
-AS
-BEGIN
-    SET NOCOUNT ON;
-    
-    SELECT @ToplamBorc = ISNULL(SUM(CezaMiktari), 0)
-    FROM Cezalar
-    WHERE KullaniciID = @KullaniciID
-    AND Durum = 'Beklemede';
-END;
-GO
-
--- Varsayılan veriler ekle
--- Varsayılan Admin kullanıcı (şifre: admin123 - hash'lenmiş olmalı)
-IF NOT EXISTS (SELECT 1 FROM Kullanıcılar WHERE EPosta = 'admin@kutuphane.com')
-BEGIN
-    INSERT INTO Kullanıcılar (Ad, Soyad, EPosta, Sifre, Rol)
-    VALUES ('Admin', 'Kullanıcı', 'admin@kutuphane.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYqB5J5X5X2', 'Admin');
-    -- Şifre: admin123 (bcrypt hash)
-END
-GO
-
--- Örnek kategoriler
-IF NOT EXISTS (SELECT 1 FROM Kategoriler WHERE KategoriAdi = 'Roman')
-BEGIN
-    INSERT INTO Kategoriler (KategoriAdi, Aciklama) VALUES
-    ('Roman', 'Roman türü kitaplar'),
-    ('Bilim Kurgu', 'Bilim kurgu türü kitaplar'),
-    ('Tarih', 'Tarih kitapları'),
-    ('Biyografi', 'Biyografi kitapları'),
-    ('Felsefe', 'Felsefe kitapları');
-END
-GO
-
