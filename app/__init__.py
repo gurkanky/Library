@@ -3,7 +3,7 @@ from flask_cors import CORS
 from config import Config
 # ÖNEMLİ: Eklentileri artık extensions.py'dan çekiyoruz
 from app.extensions import db, jwt, mail, swagger
-
+from app.controllers.reservation_controller import reservation_bp
 
 def create_app(config_class=Config):
     # Statik dosyalar ve şablonlar için yol ayarı
@@ -27,6 +27,8 @@ def create_app(config_class=Config):
     from app.controllers.admin_controller import admin_bp
     from app.controllers.category_controller import category_bp
     from app.controllers.author_controller import author_bp
+    from app.controllers.reservation_controller import reservation_bp
+    from app.controllers.review_controller import review_bp
 
     app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -36,6 +38,9 @@ def create_app(config_class=Config):
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(category_bp, url_prefix='/api/categories')
     app.register_blueprint(author_bp, url_prefix='/api/authors')
+    # Mevcut kayıtların altına ekleyin:
+    app.register_blueprint(reservation_bp, url_prefix='/api/reservations')
+    app.register_blueprint(review_bp, url_prefix='/api/reviews')
 
     # Swagger ayarları
     app.config['SWAGGER'] = {

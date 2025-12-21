@@ -1,59 +1,82 @@
-from app.repositories.user_repository import UserRepository
+from app import db
 from app.models.user import User
+from app.repositories.user_repository import UserRepository
 from flask_jwt_extended import create_access_token
-from typing import Dict, Optional
+from app.services.email_service import EmailService
 
 
 class AuthService:
-
     @staticmethod
-    def register(ad: str, soyad: str, eposta: str, sifre: str, telefon: str = None, adres: str = None) -> Dict:
-        existing_user = UserRepository.find_by_email(eposta)
-        if existing_user:
-            return {'success': False, 'message': 'Bu e-posta adresi zaten kullanılıyor'}
+    def register_user(data):
+        # 1. Validasyonlar
+        if not data.get('eposta') or not data.get('sifre'):
+            return {'success': False, 'message': 'E-posta ve şifre zorunludur'}
 
-        user = User(ad=ad, soyad=soyad, eposta=eposta, sifre=sifre, rol='Uye', telefon=telefon, adres=adres)
-        user = UserRepository.create(user)
+        if UserRepository.find_by_email(data['eposta']):
+            return {'success': False, 'message': 'Bu e-posta adresi zaten kayıtlı'}
 
-        # ID'yi String'e çevir (Garanti çözüm)
-        access_token = create_access_token(
-            identity=str(user.KullaniciID),
-            additional_claims={'rol': user.Rol}
+        # 2. Kullanıcı Oluşturma
+        # ÖNEMLİ DÜZELTME: Parametre isimleri küçük harf yapıldı (ad=, soyad=...)
+        # ve şifre ham haliyle gönderildi (Model kendi içinde hashliyor).
+        new_user = User(
+            ad=data.get('ad'),
+            soyad=data.get('soyad'),
+            eposta=data['eposta'],
+            sifre=data['sifre'],  # Ham şifre gönderiyoruz
+            telefon=data.get('telefon'),
+            adres=data.get('adres'),
+            rol='Uye'
         )
 
-        return {
-            'success': True,
-            'message': 'Kayıt başarılı',
-            'user': user.to_dict(),
-            'access_token': access_token
-        }
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+
+            # E-posta gönderimi
+            try:
+                EmailService.send_welcome_email(new_user)
+            except Exception as e:
+                print(f"Mail gönderme hatası: {e}")
+
+            # Token üretimi
+            access_token = create_access_token(identity=str(new_user.KullaniciID),
+                                               additional_claims={'rol': new_user.Rol})
+
+            return {
+                'success': True,
+                'message': 'Kayıt başarılı',
+                'access_token': access_token,
+                'user': new_user.to_dict()
+            }
+        except Exception as e:
+            db.session.rollback()
+            return {'success': False, 'message': f'Kayıt hatası: {str(e)}'}
 
     @staticmethod
-    def login(eposta: str, sifre: str) -> Dict:
-        user = UserRepository.find_by_email(eposta)
+    def login_user(email, password):
+        user = UserRepository.find_by_email(email)
 
         if not user:
-            return {'success': False, 'message': 'E-posta veya şifre hatalı'}
+            return {'success': False, 'message': 'Geçersiz e-posta veya şifre'}
 
-        if not user.check_password(sifre):
-            return {'success': False, 'message': 'E-posta veya şifre hatalı'}
+        # Şifre kontrolü (Model içindeki check_password kullanılır)
+        # Not: User modelinizde 'bcrypt' kütüphanesi kullanılıyor.
+        # Eğer yüklü değilse: pip install bcrypt
+        if not user.check_password(password):
+            return {'success': False, 'message': 'Geçersiz e-posta veya şifre'}
 
         if not user.Aktif:
             return {'success': False, 'message': 'Hesabınız pasif durumda'}
 
-        # ID'yi String'e çevir
-        access_token = create_access_token(
-            identity=str(user.KullaniciID),
-            additional_claims={'rol': user.Rol}
-        )
+        access_token = create_access_token(identity=str(user.KullaniciID), additional_claims={'rol': user.Rol})
 
         return {
             'success': True,
             'message': 'Giriş başarılı',
-            'user': user.to_dict(),
-            'access_token': access_token
+            'access_token': access_token,
+            'user': user.to_dict()
         }
 
     @staticmethod
-    def get_user(user_id: int) -> Optional[User]:
+    def get_user(user_id):
         return UserRepository.find_by_id(user_id)

@@ -27,7 +27,7 @@
 
     <div class="container">
         <h1 style="margin: 30px 0;">Kitaplar</h1>
-        
+
         <div class="card">
             <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
                 <input type="text" id="searchInput" placeholder="Kitap adı ara..." style="flex: 1; min-width: 200px;">
@@ -38,7 +38,7 @@
                 <button onclick="loadBooks()" class="btn btn-secondary">Temizle</button>
                 <button class="btn btn-success admin-link hidden" onclick="showAddBookModal()">Kitap Ekle</button>
             </div>
-            
+
             <div id="booksContainer">
                 <div class="loading">
                     <div class="spinner"></div>
@@ -48,7 +48,6 @@
         </div>
     </div>
 
-    <!-- Add Book Modal -->
     <div id="addBookModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('addBookModal')">&times;</span>
@@ -87,51 +86,74 @@
         </div>
     </div>
 
+    <div id="reviewModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close" onclick="closeModal('reviewModal')">&times;</span>
+            <h2 id="reviewModalTitle">Kitap Yorumları</h2>
+
+            <div class="review-form-container" style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <h4>Puan Ver & Yorum Yap</h4>
+                <form id="addReviewForm">
+                    <input type="hidden" id="reviewBookId">
+                    <div class="rating-select" style="margin-bottom: 10px;">
+                        <label>Puan:</label>
+                        <select id="reviewRating" required style="padding: 5px;">
+                            <option value="5">⭐⭐⭐⭐⭐ (5)</option>
+                            <option value="4">⭐⭐⭐⭐ (4)</option>
+                            <option value="3">⭐⭐⭐ (3)</option>
+                            <option value="2">⭐⭐ (2)</option>
+                            <option value="1">⭐ (1)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <textarea id="reviewText" rows="3" placeholder="Yorumunuzu buraya yazın..." style="width: 100%; padding: 8px;"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-sm">Gönder</button>
+                </form>
+            </div>
+
+            <div id="reviewsList" style="max-height: 400px; overflow-y: auto;">
+                </div>
+        </div>
+    </div>
+
     <script src="static/js/api.js"></script>
     <script src="static/js/auth.js"></script>
     <script>
         let categories = [];
-        
+
         document.addEventListener('DOMContentLoaded', async function() {
             // Token kontrolü
             const token = api.getToken();
             if (!token) {
-                console.warn('Token bulunamadı, login sayfasına yönlendiriliyor');
                 window.location.href = 'login.html';
                 return;
             }
-            
+
             const user = api.getUser();
-            if (!user) {
-                console.warn('Kullanıcı bilgisi bulunamadı, login sayfasına yönlendiriliyor');
-                window.location.href = 'login.html';
-                return;
-            }
-            
-            if (user.rol === 'Admin') {
+            if (user && user.rol === 'Admin') {
                 document.querySelectorAll('.admin-link').forEach(el => el.classList.remove('hidden'));
             }
-            
+
             updateUserInfo(user);
-            
             await loadCategories();
             await loadBooks();
         });
-        
+
         async function loadCategories() {
             try {
                 const result = await categoryAPI.getAll();
                 categories = result.categories;
-                
+
                 const categoryFilter = document.getElementById('categoryFilter');
                 const bookKategori = document.getElementById('bookKategori');
-                
+
                 categories.forEach(cat => {
                     const option1 = document.createElement('option');
                     option1.value = cat.kategoriID;
                     option1.textContent = cat.kategoriAdi;
                     categoryFilter.appendChild(option1);
-                    
+
                     const option2 = document.createElement('option');
                     option2.value = cat.kategoriID;
                     option2.textContent = cat.kategoriAdi;
@@ -141,12 +163,12 @@
                 console.error('Kategoriler yüklenirken hata:', error);
             }
         }
-        
+
         async function loadBooks() {
             try {
                 const container = document.getElementById('booksContainer');
                 container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Yükleniyor...</p></div>';
-                
+
                 const result = await bookAPI.getAll({ include_authors: 'true' });
                 displayBooks(result.books);
             } catch (error) {
@@ -154,56 +176,80 @@
                 showAlert('Kitaplar yüklenirken bir hata oluştu', 'danger');
             }
         }
-        
+
+        // --- KİTAPLARI LİSTELEME FONKSİYONU ---
         function displayBooks(books) {
             const container = document.getElementById('booksContainer');
-            
+
             if (books.length === 0) {
                 container.innerHTML = '<p>Kitap bulunamadı.</p>';
                 return;
             }
-            
+
             const user = api.getUser();
             const isAdmin = user && user.rol === 'Admin';
-            
+
             container.innerHTML = `
                 <div class="grid">
-                    ${books.map(book => `
+                    ${books.map(book => {
+                        const isAvailable = book.mevcutKopyaSayisi > 0;
+
+                        // BUTON MANTIĞI:
+                        let actionButtons = '';
+
+                        // 1. Admin Butonları (Düzenle/Sil)
+                        if (isAdmin) {
+                            actionButtons = `
+                                <button onclick="editBook(${book.kitapID})" class="btn btn-warning">Düzenle</button>
+                                <button onclick="deleteBook(${book.kitapID})" class="btn btn-danger">Sil</button>
+                            `;
+                        }
+                        // 2. Üye Butonları (Ödünç Al veya Rezerve Et)
+                        else {
+                            if (isAvailable) {
+                                actionButtons = `<button onclick="borrowBook(${book.kitapID})" class="btn btn-primary">Ödünç Al</button>`;
+                            } else {
+                                actionButtons = `<button onclick="reserveBook(${book.kitapID})" class="btn btn-warning">Sıraya Gir (Rezerve Et)</button>`;
+                            }
+                        }
+
+                        // 3. Herkes için Yorum Butonu
+                        actionButtons += `
+                            <button onclick="openReviews(${book.kitapID}, '${book.baslik}')" class="btn btn-info" style="background-color: #17a2b8; color: white;">Yorumlar</button>
+                        `;
+
+                        return `
                         <div class="book-card">
                             <h3>${book.baslik}</h3>
-                            <p class="author">${book.yazarlar && book.yazarlar.length > 0 
+                            <p class="author">${book.yazarlar && book.yazarlar.length > 0
                                 ? book.yazarlar.map(y => `${y.ad} ${y.soyad}`).join(', ')
                                 : 'Yazar bilgisi yok'}</p>
                             <p><strong>ISBN:</strong> ${book.isbn || '-'}</p>
                             <p><strong>Kategori:</strong> ${book.kategoriAdi || '-'}</p>
                             <p><strong>Mevcut Kopya:</strong> ${book.mevcutKopyaSayisi}</p>
-                            <span class="status ${book.mevcutKopyaSayisi > 0 ? 'status-available' : 'status-unavailable'}">
-                                ${book.mevcutKopyaSayisi > 0 ? 'Müsait' : 'Müsait Değil'}
+
+                            <span class="status ${isAvailable ? 'status-available' : 'status-unavailable'}">
+                                ${isAvailable ? 'Müsait' : 'Tükendi (Sıra Var)'}
                             </span>
-                            <div style="margin-top: 15px; display: flex; gap: 10px;">
-                                ${book.mevcutKopyaSayisi > 0 && !isAdmin 
-                                    ? `<button onclick="borrowBook(${book.kitapID})" class="btn btn-primary">Ödünç Al</button>`
-                                    : ''}
-                                ${isAdmin 
-                                    ? `<button onclick="editBook(${book.kitapID})" class="btn btn-warning">Düzenle</button>
-                                       <button onclick="deleteBook(${book.kitapID})" class="btn btn-danger">Sil</button>`
-                                    : ''}
+
+                            <div style="margin-top: 15px; display: flex; gap: 5px; flex-wrap: wrap;">
+                                ${actionButtons}
                             </div>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             `;
         }
-        
+
         async function searchBooks() {
             const title = document.getElementById('searchInput').value;
             const categoryId = document.getElementById('categoryFilter').value;
-            
+
             try {
                 const params = { include_authors: 'true' };
                 if (title) params.title = title;
                 if (categoryId) params.category_id = categoryId;
-                
+
                 const result = await bookAPI.getAll(params);
                 displayBooks(result.books);
             } catch (error) {
@@ -211,12 +257,11 @@
                 showAlert('Arama yapılırken bir hata oluştu', 'danger');
             }
         }
-        
+
+        // --- İŞLEM FONKSİYONLARI ---
+
         async function borrowBook(bookId) {
-            if (!confirm('Bu kitabı ödünç almak istediğinize emin misiniz?')) {
-                return;
-            }
-            
+            if (!confirm('Bu kitabı ödünç almak istediğinize emin misiniz?')) return;
             try {
                 const result = await borrowAPI.borrow(bookId);
                 if (result.success) {
@@ -224,21 +269,130 @@
                     await loadBooks();
                 }
             } catch (error) {
-                showAlert(error.message || 'Kitap ödünç alınırken bir hata oluştu', 'danger');
+                showAlert(error.message || 'Hata oluştu', 'danger');
             }
         }
-        
+
+        async function reserveBook(bookId) {
+            if (!confirm('Bu kitap için sıraya girmek (rezervasyon yapmak) istiyor musunuz?')) return;
+            try {
+                const result = await reservationAPI.create({ kitapID: bookId });
+                if (result.success) {
+                    showAlert('Başarıyla sıraya girdiniz! Kitap geldiğinde haber verilecek.', 'success');
+                }
+            } catch (error) {
+                showAlert(error.message || 'Rezervasyon hatası', 'danger');
+            }
+        }
+
+        // --- YORUM SİSTEMİ FONKSİYONLARI ---
+
+        async function openReviews(bookId, bookTitle) {
+            document.getElementById('reviewModal').style.display = 'block';
+            document.getElementById('reviewModalTitle').textContent = `${bookTitle} - Yorumlar`;
+            document.getElementById('reviewBookId').value = bookId;
+            await loadReviews(bookId);
+        }
+
+        async function loadReviews(bookId) {
+            const listContainer = document.getElementById('reviewsList');
+            listContainer.innerHTML = '<p>Yükleniyor...</p>';
+
+            try {
+                const result = await reviewAPI.getByBook(bookId);
+                const currentUser = api.getUser();
+
+                if (result.success && result.reviews.length > 0) {
+                    listContainer.innerHTML = result.reviews.map(review => {
+                        // Silme butonu mantığı: Kendi yorumuysa VEYA Admin ise
+                        let deleteBtn = '';
+                        if (currentUser) {
+                            if (review.kullaniciID === currentUser.kullaniciID || currentUser.rol === 'Admin') {
+                                deleteBtn = `<button onclick="deleteReview(${review.yorumID}, ${bookId})" class="btn btn-danger btn-sm" style="float:right; font-size:12px; padding:2px 6px;">Sil</button>`;
+                            }
+                        }
+
+                        return `
+                        <div style="border-bottom: 1px solid #eee; padding: 10px 0;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <strong>${review.kullaniciAdi}</strong>
+                                <span style="color: #f39c12;">${'★'.repeat(review.puan)}${'☆'.repeat(5-review.puan)}</span>
+                            </div>
+                            <p style="margin: 5px 0;">${review.yorum}</p>
+                            <small style="color: #888;">${review.tarih}</small>
+                            ${deleteBtn}
+                        </div>
+                        `;
+                    }).join('');
+                } else {
+                    listContainer.innerHTML = '<p class="text-center" style="padding:20px;">Henüz yorum yok. İlk yorumu sen yap!</p>';
+                }
+            } catch (error) {
+                listContainer.innerHTML = '<p style="color:red">Yorumlar yüklenirken hata oluştu.</p>';
+            }
+        }
+
+        // Yorum Formu Submit
+        document.getElementById('addReviewForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const bookId = document.getElementById('reviewBookId').value;
+            const rating = document.getElementById('reviewRating').value;
+            const comment = document.getElementById('reviewText').value;
+
+            try {
+                const result = await reviewAPI.add({
+                    kitapID: parseInt(bookId),
+                    puan: parseInt(rating),
+                    yorum: comment
+                });
+
+                if (result.success) {
+                    alert('Yorumunuz eklendi!');
+                    document.getElementById('reviewText').value = ''; // Temizle
+                    await loadReviews(bookId); // Yenile
+                } else {
+                    alert(result.message);
+                }
+            } catch (error) {
+                alert('Hata: ' + error.message);
+            }
+        });
+
+        // Yorum Silme
+        async function deleteReview(reviewId, bookId) {
+            if(!confirm('Bu yorumu silmek istediğinize emin misiniz?')) return;
+            try {
+                const result = await reviewAPI.delete(reviewId);
+                if(result.success) {
+                    await loadReviews(bookId);
+                } else {
+                    alert(result.message);
+                }
+            } catch (error) {
+                alert('Silme hatası: ' + error.message);
+            }
+        }
+
+        // --- ADMIN FONKSİYONLARI ---
+
         function showAddBookModal() {
             document.getElementById('addBookModal').style.display = 'block';
         }
-        
+
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = 'none';
         }
-        
+
+        // Modal dışına tıklanınca kapat
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        }
+
+        // Kitap Ekleme Submit
         document.getElementById('addBookForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
             const bookData = {
                 baslik: document.getElementById('bookBaslik').value,
                 isbn: document.getElementById('bookISBN').value,
@@ -248,7 +402,7 @@
                 yayinEvi: document.getElementById('bookYayinEvi').value,
                 aciklama: document.getElementById('bookAciklama').value
             };
-            
+
             try {
                 const result = await bookAPI.create(bookData);
                 if (result.success) {
@@ -258,15 +412,12 @@
                     await loadBooks();
                 }
             } catch (error) {
-                showAlert(error.message || 'Kitap eklenirken bir hata oluştu', 'danger');
+                showAlert(error.message || 'Hata oluştu', 'danger');
             }
         });
-        
+
         async function deleteBook(bookId) {
-            if (!confirm('Bu kitabı silmek istediğinize emin misiniz?')) {
-                return;
-            }
-            
+            if (!confirm('Bu kitabı silmek istediğinize emin misiniz?')) return;
             try {
                 const result = await bookAPI.delete(bookId);
                 if (result.success) {
@@ -274,18 +425,9 @@
                     await loadBooks();
                 }
             } catch (error) {
-                showAlert(error.message || 'Kitap silinirken bir hata oluştu', 'danger');
-            }
-        }
-        
-        // Modal dışına tıklanınca kapat
-        window.onclick = function(event) {
-            const modal = document.getElementById('addBookModal');
-            if (event.target == modal) {
-                closeModal('addBookModal');
+                showAlert(error.message || 'Hata oluştu', 'danger');
             }
         }
     </script>
 </body>
 </html>
-

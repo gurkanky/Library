@@ -1,144 +1,149 @@
+from app import db
+from datetime import datetime, timedelta
+from app.models.borrow import Borrow
+from app.models.penalty import Penalty
 from app.repositories.borrow_repository import BorrowRepository
 from app.repositories.book_repository import BookRepository
 from app.repositories.user_repository import UserRepository
-from app.models.borrow import Borrow
+from app.repositories.reservation_repository import ReservationRepository
 from app.services.email_service import EmailService
-from app import db  # db nesnesini ekledik
-from datetime import datetime
-from typing import List, Dict
 
 
 class BorrowService:
-
     @staticmethod
-    def borrow_book(user_id: int, book_id: int, odunc_gun_sayisi: int = 21) -> Dict:
-        # Kitap kontrolü
+    def borrow_book(user_id, book_id, odunc_gun_sayisi=15):
+        # 1. Kitap Kontrolü
         book = BookRepository.find_by_id(book_id)
         if not book:
             return {'success': False, 'message': 'Kitap bulunamadı'}
 
         if book.MevcutKopyaSayisi <= 0:
-            return {'success': False, 'message': 'Kitap stokta yok'}
+            return {'success': False, 'message': 'Kitap stokta yok (Tükendi)'}
 
-        # Kullanıcı kontrolü
+        # 2. Kullanıcı Kontrolü
         user = UserRepository.find_by_id(user_id)
         if not user:
             return {'success': False, 'message': 'Kullanıcı bulunamadı'}
 
-        # Aktif ödünç sayısı kontrolü (max 5 kitap)
+        # 3. Aktif ödünç sayısı kontrolü
         active_borrows = BorrowRepository.find_active_by_user(user_id)
-        if len(active_borrows) >= 5:
-            return {'success': False, 'message': 'Maksimum 5 kitap ödünç alabilirsiniz'}
+        if len(active_borrows) >= 3:
+            return {'success': False, 'message': 'Aynı anda en fazla 3 kitap ödünç alabilirsiniz.'}
 
         try:
-            # 1. Ödünç işlemini oluştur
-            borrow = Borrow(kullanici_id=user_id, kitap_id=book_id, odunc_gun_sayisi=odunc_gun_sayisi)
-            db.session.add(borrow)
-
-            # 2. MANUEL STOK GÜNCELLEME (Trigger yerine Python ile)
+            # 4. Stok Düşür
             book.MevcutKopyaSayisi -= 1
             db.session.add(book)
 
-            # 3. Hepsini tek seferde kaydet
+            # 5. Ödünç Kaydı Oluştur (DÜZELTME: Sadece init'in istediği parametreleri gönderiyoruz)
+            # Modelinizdeki __init__ metodu tarihleri kendi hesaplıyor.
+            borrow = Borrow(
+                kullanici_id=user_id,
+                kitap_id=book_id,
+                odunc_gun_sayisi=odunc_gun_sayisi
+            )
+
+            db.session.add(borrow)
             db.session.commit()
 
-            # E-posta gönder (İsteğe bağlı)
+            # --- E-POSTA GÖNDERİMİ ---
             try:
-                EmailService.send_email(user.EPosta, "Kitap Ödünç Alındı", f"'{book.Baslik}' kitabını ödünç aldınız.")
-            except:
-                pass
+                # Erişimde Modeldeki sütun adını kullanıyoruz (BeklenenIadeTarihi)
+                EmailService.send_borrow_notification(user, book, borrow.BeklenenIadeTarihi)
+            except Exception as e:
+                print(f"Ödünç maili hatası: {e}")
+            # -------------------------
 
             return {
                 'success': True,
-                'message': 'Kitap başarıyla ödünç alındı',
+                'message': 'Kitap başarıyla ödünç alındı.',
                 'borrow': borrow.to_dict(include_book=True)
             }
+
         except Exception as e:
-            db.session.rollback()  # Hata olursa işlemleri geri al
-            return {'success': False, 'message': f'Hata oluştu: {str(e)}'}
+            db.session.rollback()
+            return {'success': False, 'message': f"Hata: {str(e)}"}
 
     @staticmethod
-    def return_book(borrow_id: int, user_id: int = None) -> Dict:
+    def return_book(borrow_id, user_id=None):
         borrow = BorrowRepository.find_by_id(borrow_id)
         if not borrow:
-            return {'success': False, 'message': 'Ödünç kaydı bulunamadı'}
+            return {'success': False, 'message': 'Kayıt bulunamadı'}
 
-        # Yetki kontrolü
+        # Yetki kontrolü (Modelde KullaniciID büyük harf)
         if user_id and borrow.KullaniciID != user_id:
-            return {'success': False, 'message': 'Bu işlemi yapmaya yetkiniz yok'}
+            return {'success': False, 'message': 'Bu işlem için yetkiniz yok'}
 
-        if borrow.Durum == 'IadeEdildi':
-            return {'success': False, 'message': 'Kitap zaten iade edilmiş'}
+        # Durum ve IadeTarihi kontrolü
+        if borrow.Durum == 'IadeEdildi' or borrow.IadeTarihi:
+            return {'success': False, 'message': 'Bu kitap zaten iade edilmiş'}
 
         try:
-            # 1. İade işlemini güncelle
-            borrow.IadeTarihi = datetime.utcnow()
+            current_time = datetime.utcnow()
+            borrow.IadeTarihi = current_time
             borrow.Durum = 'IadeEdildi'
 
-            # 2. MANUEL STOK GÜNCELLEME (Stok arttır)
+            # Gecikme Cezası Hesaplama (Modelde BeklenenIadeTarihi büyük harf)
+            if current_time > borrow.BeklenenIadeTarihi:
+                delta = current_time - borrow.BeklenenIadeTarihi
+                late_days = delta.days
+                if late_days > 0:
+                    penalty_amount = late_days * 1.5
+
+                    # Penalty modeli
+                    penalty = Penalty(
+                        UyeID=borrow.KullaniciID,
+                        OduncID=borrow.OduncID,
+                        Tutar=penalty_amount,
+                        Aciklama=f"{late_days} gün gecikme"
+                    )
+                    db.session.add(penalty)
+
+            # Kitap Stoğunu Artır
             book = BookRepository.find_by_id(borrow.KitapID)
             if book:
                 book.MevcutKopyaSayisi += 1
                 db.session.add(book)
 
+            # --- REZERVASYON KONTROLÜ ---
+            next_reservation = ReservationRepository.find_active_by_book(borrow.KitapID)
+
+            if next_reservation:
+                reserver_user = UserRepository.find_by_id(next_reservation.KullaniciID)
+                if reserver_user:
+                    try:
+                        EmailService.send_reservation_notification(reserver_user, book)
+                        next_reservation.Durum = 'Tamamlandi'
+                        db.session.add(next_reservation)
+                    except Exception as email_err:
+                        print(f"Rezervasyon mail hatası: {email_err}")
+            # ---------------------------
+
             db.session.add(borrow)
             db.session.commit()
 
-            # Geç iade kontrolü ve E-posta
-            try:
-                if borrow.IadeTarihi > borrow.BeklenenIadeTarihi:
-                    gecikme_gunu = (borrow.IadeTarihi - borrow.BeklenenIadeTarihi).days
-                    EmailService.send_late_return_notification(borrow, gecikme_gunu)
-            except Exception as e:
-                print(f"[BorrowService] E-posta hatası: {str(e)}")
+            return {'success': True, 'message': 'Kitap iade alındı.'}
 
-            return {
-                'success': True,
-                'message': 'Kitap iade edildi',
-                'borrow': borrow.to_dict(include_book=True)
-            }
         except Exception as e:
             db.session.rollback()
-            return {'success': False, 'message': f'İade hatası: {str(e)}'}
+            return {'success': False, 'message': str(e)}
 
     @staticmethod
-    def get_user_borrows(user_id: int) -> List[Dict]:
+    def get_user_borrows(user_id):
         borrows = BorrowRepository.find_by_user(user_id)
-        return [borrow.to_dict(include_book=True) for borrow in borrows]
+        return [b.to_dict(include_book=True) for b in borrows]
 
     @staticmethod
-    def get_all_borrows() -> List[Dict]:
+    def get_all_borrows():
         borrows = BorrowRepository.find_all()
-        return [borrow.to_dict(include_book=True, include_user=True) for borrow in borrows]
+        return [b.to_dict(include_book=True, include_user=True) for b in borrows]
 
     @staticmethod
-    def get_overdue_borrows() -> List[Dict]:
+    def get_overdue_borrows():
         borrows = BorrowRepository.find_overdue()
-        return [borrow.to_dict(include_book=True, include_user=True) for borrow in borrows]
+        return [b.to_dict(include_book=True, include_user=True) for b in borrows]
 
     @staticmethod
-    def check_overdue_borrows() -> Dict:
-        """Geç iade edilen kitapları kontrol et"""
-        overdue = BorrowRepository.find_overdue()
-        count = 0
-
-        for borrow in overdue:
-            if borrow.Durum == 'Aktif':
-                borrow.Durum = 'Gecikmis'
-                db.session.add(borrow)
-                count += 1
-                # E-posta bildirimi
-                try:
-                    gecikme_gunu = (datetime.utcnow() - borrow.BeklenenIadeTarihi).days
-                    EmailService.send_overdue_notification(borrow, gecikme_gunu)
-                except:
-                    pass
-
-        if count > 0:
-            db.session.commit()
-
-        return {
-            'success': True,
-            'overdue_count': len(overdue),
-            'overdue_borrows': [b.to_dict(include_book=True, include_user=True) for b in overdue]
-        }
+    def check_overdue_borrows():
+        overdue_list = BorrowRepository.find_overdue()
+        return {'success': True, 'count': len(overdue_list)}

@@ -59,6 +59,23 @@
         </div>
     </div>
 
+    <div class="mt-5">
+    <h2>Rezervasyonlarım (Sırada Beklediklerim)</h2>
+    <div id="reservations-list" class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Kitap</th>
+                    <th>Rezervasyon Tarihi</th>
+                    <th>Durum</th>
+                </tr>
+            </thead>
+            <tbody id="reservations-body">
+                </tbody>
+        </table>
+    </div>
+</div>
+
     <script src="static/js/api.js"></script>
     <script src="static/js/auth.js"></script>
     <script src="static/js/token_check.js"></script>
@@ -284,6 +301,34 @@
                 showAlert(error.message || 'Ceza ödenirken bir hata oluştu', 'danger');
             }
         }
+
+        // Sayfa yüklendiğinde çalışacak fonksiyon
+async function loadReservations() {
+    try {
+        const result = await reservationAPI.getMyReservations();
+        const tbody = document.getElementById('reservations-body');
+
+        if (result.success && result.reservations.length > 0) {
+            tbody.innerHTML = result.reservations.map(res => `
+                <tr>
+                    <td>${res.kitap.baslik}</td>
+                    <td>${new Date(res.rezervasyonTarihi).toLocaleDateString('tr-TR')}</td>
+                    <td>
+                        <span class="badge bg-info text-dark">${res.durum}</span>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center">Aktif rezervasyonunuz bulunmuyor.</td></tr>';
+        }
+    } catch (error) {
+        console.error('Rezervasyonlar yüklenirken hata:', error);
+    }
+}
+
+// Mevcut loadMyBooks() fonksiyonunun hemen altına ekleyin:
+// loadMyBooks();
+loadReservations(); // <-- Bunu çağırın
     </script>
 </body>
 </html>
