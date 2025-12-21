@@ -1,9 +1,10 @@
 from app import db
 from datetime import datetime
 
+
 class Book(db.Model):
     __tablename__ = 'Kitaplar'
-    
+
     KitapID = db.Column(db.Integer, primary_key=True)
     Baslik = db.Column(db.String(200), nullable=False)
     ISBN = db.Column(db.String(20), unique=True)
@@ -16,11 +17,18 @@ class Book(db.Model):
     Dil = db.Column(db.String(20), default='Türkçe')
     Aciklama = db.Column(db.String(1000))
     OlusturmaTarihi = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    authors = db.relationship('BookAuthor', backref='book', lazy=True, cascade='all, delete-orphan')
-    borrows = db.relationship('Borrow', backref='book', lazy=True)
-    
+
+    # --- İLİŞKİLER ---
+    # 1. Kategori ilişkisi:
+    # backref='books' sayesinde Category modeline 'books' özelliği eklenir.
+    category = db.relationship('Category', backref=db.backref('books', lazy=True))
+
+    # 2. Yazar ve Ödünç ilişkileri SİLİNDİ
+    # 'authors' ve 'borrows' satırlarını kaldırdık çünkü:
+    # - Borrow modelinde: book = db.relationship(..., backref='borrows') var.
+    # - BookAuthor modelinde: book = db.relationship(..., backref='authors') var.
+    # Bu tanımlar otomatik olarak buraya ekleniyor.
+
     def to_dict(self, include_authors=False):
         data = {
             'kitapID': self.KitapID,
@@ -37,15 +45,15 @@ class Book(db.Model):
             'aciklama': self.Aciklama,
             'olusturmaTarihi': self.OlusturmaTarihi.isoformat() if self.OlusturmaTarihi else None
         }
-        
-        if include_authors:
+
+        # 'authors' backref ile BookAuthor modelinden geliyor
+        if include_authors and hasattr(self, 'authors'):
             data['yazarlar'] = [
                 {'yazarID': ba.author.YazarID, 'ad': ba.author.Ad, 'soyad': ba.author.Soyad}
                 for ba in self.authors
             ]
-        
+
         return data
-    
+
     def __repr__(self):
         return f'<Book {self.Baslik}>'
-
