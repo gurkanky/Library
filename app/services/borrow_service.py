@@ -35,20 +35,25 @@ class BorrowService:
             book.MevcutKopyaSayisi -= 1
             db.session.add(book)
 
-            # 5. Ödünç Kaydı Oluştur (DÜZELTME: Sadece init'in istediği parametreleri gönderiyoruz)
-            # Modelinizdeki __init__ metodu tarihleri kendi hesaplıyor.
+            # 5. Ödünç Kaydı Oluştur
+            # ------------------------------------------------------
+            # TEST MODU: Ödünç süresi 1 Dakika
+            # ------------------------------------------------------
+
             borrow = Borrow(
                 kullanici_id=user_id,
                 kitap_id=book_id,
                 odunc_gun_sayisi=odunc_gun_sayisi
             )
 
+            # Beklenen iade tarihini şu anki zamandan 1 dakika sonrasına ayarla
+            borrow.BeklenenIadeTarihi = datetime.utcnow() + timedelta(minutes=1)
+
             db.session.add(borrow)
             db.session.commit()
 
             # --- E-POSTA GÖNDERİMİ ---
             try:
-                # Erişimde Modeldeki sütun adını kullanıyoruz (BeklenenIadeTarihi)
                 EmailService.send_borrow_notification(user, book, borrow.BeklenenIadeTarihi)
             except Exception as e:
                 print(f"Ödünç maili hatası: {e}")
@@ -56,7 +61,7 @@ class BorrowService:
 
             return {
                 'success': True,
-                'message': 'Kitap başarıyla ödünç alındı.',
+                'message': 'Kitap başarıyla ödünç alındı. (Süre: 1 Dakika)',
                 'borrow': borrow.to_dict(include_book=True)
             }
 
@@ -70,11 +75,11 @@ class BorrowService:
         if not borrow:
             return {'success': False, 'message': 'Kayıt bulunamadı'}
 
-        # Yetki kontrolü (Modelde KullaniciID büyük harf)
+        # Yetki kontrolü
         if user_id and borrow.KullaniciID != user_id:
             return {'success': False, 'message': 'Bu işlem için yetkiniz yok'}
 
-        # Durum ve IadeTarihi kontrolü
+        # Durum kontrolü
         if borrow.Durum == 'IadeEdildi' or borrow.IadeTarihi:
             return {'success': False, 'message': 'Bu kitap zaten iade edilmiş'}
 
@@ -83,21 +88,30 @@ class BorrowService:
             borrow.IadeTarihi = current_time
             borrow.Durum = 'IadeEdildi'
 
-            # Gecikme Cezası Hesaplama (Modelde BeklenenIadeTarihi büyük harf)
+            # --- CEZA HESAPLAMA (GÜNCELLENDİ: Dakika Başına Ücret) ---
             if current_time > borrow.BeklenenIadeTarihi:
+                # Farkı hesapla
                 delta = current_time - borrow.BeklenenIadeTarihi
-                late_days = delta.days
-                if late_days > 0:
-                    penalty_amount = late_days * 1.5
 
-                    # Penalty modeli
-                    penalty = Penalty(
-                        UyeID=borrow.KullaniciID,
-                        OduncID=borrow.OduncID,
-                        Tutar=penalty_amount,
-                        Aciklama=f"{late_days} gün gecikme"
-                    )
-                    db.session.add(penalty)
+                # Toplam geçen süreyi dakikaya çevir (saniyeleri de hesaba katıp int'e çeviriyoruz)
+                late_minutes = int(delta.total_seconds() / 60)
+
+                # Eğer gecikme varsa ama 1 dakikadan az ise (saniyelerle gecikme), en az 1 dakika sayalım
+                if late_minutes < 1:
+                    late_minutes = 1
+
+                # Dakika başına 1.50 TL ceza
+                penalty_amount = late_minutes * 1.50
+
+                penalty = Penalty(
+                    KullaniciID=borrow.KullaniciID,
+                    OduncID=borrow.OduncID,
+                    CezaMiktari=penalty_amount,
+                    CezaNedeni=f"{late_minutes} dakika gecikme"
+                )
+
+                db.session.add(penalty)
+            # -----------------------------------
 
             # Kitap Stoğunu Artır
             book = BookRepository.find_by_id(borrow.KitapID)
@@ -122,7 +136,11 @@ class BorrowService:
             db.session.add(borrow)
             db.session.commit()
 
-            return {'success': True, 'message': 'Kitap iade alındı.'}
+            msg = 'Kitap iade alındı.'
+            if current_time > borrow.BeklenenIadeTarihi:
+                msg += ' (Gecikme cezası uygulandı)'
+
+            return {'success': True, 'message': msg}
 
         except Exception as e:
             db.session.rollback()

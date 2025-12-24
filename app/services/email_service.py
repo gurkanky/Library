@@ -30,6 +30,22 @@ class EmailService:
     # --- ÖZEL SENARYOLAR ---
 
     @staticmethod
+    def send_verification_code(user, code):
+        """Kayıt doğrulama kodu gönderir (YENİ EKLENEN METOD)"""
+        subject = "Hesap Doğrulama Kodunuz - Akıllı Kütüphane"
+        body = f"""Merhaba {user.Ad},
+
+Akıllı Kütüphane sistemine hoş geldiniz!
+Kaydınızı tamamlamak için lütfen aşağıdaki doğrulama kodunu kullanın:
+
+DOĞRULAMA KODU: {code}
+
+Bu kodu kimseyle paylaşmayın.
+Teşekkürler.
+"""
+        EmailService.send_email(user.EPosta, subject, body)
+
+    @staticmethod
     def send_welcome_email(user):
         """Yeni üye olan kullanıcıya gider"""
         subject = "Aramıza Hoş Geldiniz! 📚"
@@ -53,7 +69,7 @@ Artık kütüphanemizdeki binlerce kitaba erişebilir, ödünç alabilir ve yoru
 
 Son Teslim Tarihi: {tarih_str}
 
-Lütfen kitabı zamanında iade etmeyi unutmayın, aksi takdirde günlük gecikme cezası uygulanacaktır.
+Lütfen kitabı zamanında iade etmeyi unutmayın, aksi takdirde dakikalık gecikme cezası uygulanacaktır.
 
 Keyifli okumalar!
 """
@@ -68,4 +84,19 @@ Keyifli okumalar!
 Sırada beklediğiniz '{book.Baslik}' kitabı şu an kütüphaneye iade edildi.
 Hemen giriş yapıp kitabı ödünç alabilirsiniz!
 """
+        EmailService.send_email(user.EPosta, subject, body)
+
+    @staticmethod
+    def send_password_reset_code(user, code):
+        """Şifre sıfırlama kodunu gönderir"""
+        subject = "Şifre Sıfırlama İsteği - Akıllı Kütüphane"
+        body = f"""Merhaba {user.Ad},
+
+    Şifrenizi sıfırlamak için bir istek aldık.
+    Eğer bu isteği siz yapmadıysanız, bu maili görmezden gelebilirsiniz.
+
+    ŞİFRE SIFIRLAMA KODUNUZ: {code}
+
+    Bu kodu ilgili ekrana girerek yeni şifrenizi oluşturabilirsiniz.
+    """
         EmailService.send_email(user.EPosta, subject, body)

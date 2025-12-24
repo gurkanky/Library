@@ -16,10 +16,23 @@ def register():
         if not all(field in data for field in required_fields):
             return jsonify({'success': False, 'message': 'Eksik alanlar var'}), 400
 
-        # DÜZELTME: Metod adı 'register_user' ve parametre olarak tüm 'data' gönderiliyor
         result = AuthService.register_user(data)
 
         status_code = 201 if result['success'] else 400
+        return jsonify(result), status_code
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@auth_bp.route('/verify-email', methods=['POST'])
+def verify_email():
+    """E-posta doğrulama endpoint'i"""
+    try:
+        data = request.get_json()
+        result = AuthService.verify_email(data)
+
+        status_code = 200 if result['success'] else 400
         return jsonify(result), status_code
 
     except Exception as e:
@@ -35,7 +48,6 @@ def login():
         if not data or 'eposta' not in data or 'sifre' not in data:
             return jsonify({'success': False, 'message': 'E-posta ve şifre gerekli'}), 400
 
-        # DÜZELTME: Metod adı 'login_user' olarak güncellendi
         result = AuthService.login_user(
             email=data['eposta'],
             password=data['sifre']
@@ -55,13 +67,42 @@ def get_current_user():
     try:
         user_id = get_jwt_identity()
 
-        # Bu metodun serviste tanımlı olduğundan emin olacağız (2. Adım)
         user = AuthService.get_user(int(user_id))
 
         if user:
             return jsonify({'success': True, 'user': user.to_dict()}), 200
         else:
             return jsonify({'success': False, 'message': 'Kullanıcı bulunamadı'}), 404
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# --- YENİ EKLENEN ENDPOINTLER (ŞİFREMİ UNUTTUM) ---
+
+@auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """Şifre sıfırlama kodu gönder"""
+    try:
+        data = request.get_json()
+        result = AuthService.forgot_password(data)
+
+        status_code = 200 if result['success'] else 400
+        return jsonify(result), status_code
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """Yeni şifreyi kaydet"""
+    try:
+        data = request.get_json()
+        result = AuthService.reset_password(data)
+
+        status_code = 200 if result['success'] else 400
+        return jsonify(result), status_code
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500

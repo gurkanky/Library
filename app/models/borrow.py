@@ -15,8 +15,7 @@ class Borrow(db.Model):
     Durum = db.Column(db.String(20), default='Aktif')
     Notlar = db.Column(db.String(500))
 
-    # İLİŞKİLER (Burada tanımlı)
-    # Book modeline 'borrows' adında bir özellik ekler
+    # İLİŞKİLER
     book = db.relationship('Book', backref='borrows', lazy=True)
     penalty = db.relationship('Penalty', backref='borrow', uselist=False, lazy=True)
 
@@ -24,6 +23,7 @@ class Borrow(db.Model):
         self.KullaniciID = kullanici_id
         self.KitapID = kitap_id
         self.OduncAlmaTarihi = datetime.utcnow()
+        # Varsayılan hesaplama (Servis katmanında bu değer eziliyor olabilir)
         self.BeklenenIadeTarihi = datetime.utcnow() + timedelta(days=odunc_gun_sayisi)
         self.Durum = 'Aktif'
 
@@ -45,12 +45,21 @@ class Borrow(db.Model):
             else:
                 data['kitap'] = {'baslik': 'Bilinmeyen Kitap', 'kitapID': self.KitapID}
 
-        # Gecikme hesaplama
+        # --- GECİKME HESAPLAMA DÜZELTMESİ ---
+        # Test ortamında dakika bazlı gecikmeleri de yakalamak için mantığı güncelliyoruz.
+
+        gecikme = 0
         if self.Durum == 'Aktif' and datetime.utcnow() > self.BeklenenIadeTarihi:
-            data['gecikmeGunu'] = (datetime.utcnow() - self.BeklenenIadeTarihi).days
+            diff = datetime.utcnow() - self.BeklenenIadeTarihi
+            # Eğer fark pozitifse ama 1 günden azsa (örn: 5 dakika), days 0 döner.
+            # Bu durumda en az 1 yazalım ki arayüzde 'Gecikme' olarak görünsün.
+            gecikme = diff.days if diff.days > 0 else 1
+
         elif self.Durum == 'IadeEdildi' and self.IadeTarihi and self.IadeTarihi > self.BeklenenIadeTarihi:
-            data['gecikmeGunu'] = (self.IadeTarihi - self.BeklenenIadeTarihi).days
-        else:
-            data['gecikmeGunu'] = 0
+            diff = self.IadeTarihi - self.BeklenenIadeTarihi
+            gecikme = diff.days if diff.days > 0 else 1
+
+        data['gecikmeGunu'] = gecikme
+        # ------------------------------------
 
         return data

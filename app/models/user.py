@@ -14,8 +14,9 @@ class User(db.Model):
     Rol = db.Column(db.String(20), nullable=False, default='Uye')
     Telefon = db.Column(db.String(20))
     Adres = db.Column(db.String(500))
-    Aktif = db.Column(db.Boolean, default=True)
+    Aktif = db.Column(db.Boolean, default=False)
     OlusturmaTarihi = db.Column(db.DateTime, default=datetime.utcnow)
+    DogrulamaKodu = db.Column(db.String(6), nullable=True)
 
     # İlişkiler
     borrows = db.relationship('Borrow', backref='user', lazy=True, cascade='all, delete-orphan')
@@ -23,7 +24,7 @@ class User(db.Model):
     # Favoriler ilişkisi eklendi
     favorites = db.relationship('Favorite', backref='user', lazy=True, cascade='all, delete-orphan')
 
-    def __init__(self, ad, soyad, eposta, sifre, rol='Uye', telefon=None, adres=None):
+    def __init__(self, ad, soyad, eposta, sifre, rol='Uye', telefon=None, adres=None, dogrulama_kodu=None):
         self.Ad = ad
         self.Soyad = soyad
         self.EPosta = eposta
@@ -31,7 +32,8 @@ class User(db.Model):
         self.Rol = rol
         self.Telefon = telefon
         self.Adres = adres
-        self.Aktif = True
+        self.Aktif = False
+        self.DogrulamaKodu = dogrulama_kodu
         self.OlusturmaTarihi = datetime.utcnow()
 
     def set_password(self, password):

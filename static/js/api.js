@@ -1,152 +1,219 @@
 // API Base URL
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = '';
 
-// Token yönetimi
-let authToken = localStorage.getItem('authToken');
-let currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
-
-// API Helper Functions
+// --- GENEL YARDIMCILAR ---
 const api = {
-    setToken(token) {
-        authToken = token;
-        localStorage.setItem('authToken', token);
+    getToken: () => localStorage.getItem('access_token'),
+    setToken: (token) => localStorage.setItem('access_token', token),
+    removeToken: () => localStorage.removeItem('access_token'),
+
+    getUser: () => {
+        const userStr = localStorage.getItem('user');
+        return userStr ? JSON.parse(userStr) : null;
     },
-    getToken() {
-        return authToken || localStorage.getItem('authToken');
+    setUser: (user) => localStorage.setItem('user', JSON.stringify(user)),
+    removeUser: () => localStorage.removeItem('user'),
+
+    logout: () => {
+        api.removeToken();
+        api.removeUser();
+        window.location.href = 'login.html';
     },
-    setUser(user) {
-        currentUser = user;
-        localStorage.setItem('currentUser', JSON.stringify(user));
-    },
-    getUser() {
-        return currentUser || JSON.parse(localStorage.getItem('currentUser') || 'null');
-    },
-    logout() {
-        authToken = null;
-        currentUser = null;
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('currentUser');
-        window.location.href = 'index.html'; // Login sayfasına yönlendir
-    },
-    async request(endpoint, options = {}) {
-        const url = `${API_BASE_URL}${endpoint}`;
-        const token = this.getToken();
-        const defaultOptions = {
-            headers: { 'Content-Type': 'application/json' }
+
+    // Standart Fetch Fonksiyonu
+    fetch: async (endpoint, options = {}) => {
+        const token = api.getToken();
+
+        const headers = {
+            'Content-Type': 'application/json',
+            ...options.headers
         };
+
         if (token) {
-            defaultOptions.headers['Authorization'] = `Bearer ${token}`;
+            headers['Authorization'] = `Bearer ${token}`;
         }
+
+        let url = `${API_BASE_URL}${endpoint}`;
+        if (options.params) {
+            const params = new URLSearchParams(options.params);
+            url += `?${params.toString()}`;
+        }
+
         const config = {
-            ...defaultOptions,
-            ...options,
-            headers: { ...defaultOptions.headers, ...(options.headers || {}) }
+            method: options.method || 'GET',
+            headers: headers,
         };
+
+        if (options.body) {
+            config.body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+        }
+
         try {
             const response = await fetch(url, config);
-            const data = await response.json();
+
             if (response.status === 401) {
-                this.logout();
-                throw new Error('Oturum süresi dolmuş.');
+                console.warn('Oturum süresi doldu.');
+                api.logout();
+                return null;
             }
-            if (!response.ok) {
-                throw new Error(data.message || 'Bir hata oluştu');
-            }
-            return data;
+
+            return await response.json();
         } catch (error) {
-            console.error('API Error:', error);
+            console.error('API Hatası:', error);
             throw error;
         }
-    },
-    async get(endpoint) { return this.request(endpoint, { method: 'GET' }); },
-    async post(endpoint, data) { return this.request(endpoint, { method: 'POST', body: JSON.stringify(data) }); },
-    async put(endpoint, data) { return this.request(endpoint, { method: 'PUT', body: JSON.stringify(data) }); },
-    async delete(endpoint) { return this.request(endpoint, { method: 'DELETE' }); }
+    }
 };
 
-// --- API GRUPLARI ---
-
+// --- 1. AUTH (KİMLİK DOĞRULAMA) API ---
 const authAPI = {
-    async register(userData) { return api.post('/auth/register', userData); },
-    async login(email, password) { return api.post('/auth/login', { eposta: email, sifre: password }); },
-    async getCurrentUser() { return api.get('/auth/me'); }
+    login: async (email, password) => {
+        return await api.fetch('/api/auth/login', {
+            method: 'POST',
+            body: { eposta: email, sifre: password }
+        });
+    },
+    register: async (userData) => {
+        return await api.fetch('/api/auth/register', {
+            method: 'POST',
+            body: userData
+        });
+    },
+    verifyEmail: async (data) => {
+        return await api.fetch('/api/auth/verify-email', {
+            method: 'POST',
+            body: data
+        });
+    },
+    getCurrentUser: async () => {
+        return await api.fetch('/api/auth/me');
+    },
+    // YENİ: Şifremi Unuttum
+    forgotPassword: async (email) => {
+        return await api.fetch('/api/auth/forgot-password', {
+            method: 'POST',
+            body: { eposta: email }
+        });
+    },
+    // YENİ: Şifre Sıfırlama
+    resetPassword: async (data) => {
+        return await api.fetch('/api/auth/reset-password', {
+            method: 'POST',
+            body: data
+        });
+    }
 };
 
+// --- 2. KİTAP (BOOK) API ---
 const bookAPI = {
-    async getAll(params = {}) {
-        const queryString = new URLSearchParams(params).toString();
-        return api.get(`/books${queryString ? '?' + queryString : ''}`);
+    getAll: async (params = {}) => {
+        return await api.fetch('/api/books', { params });
     },
-    async getById(bookId) { return api.get(`/books/${bookId}`); },
-    async create(bookData) { return api.post('/books', bookData); },
-    async update(bookId, bookData) { return api.put(`/books/${bookId}`, bookData); },
-    async delete(bookId) { return api.delete(`/books/${bookId}`); }
+    getById: async (id) => {
+        return await api.fetch(`/api/books/${id}`);
+    },
+    create: async (data) => {
+        return await api.fetch('/api/books', {
+            method: 'POST',
+            body: data
+        });
+    },
+    update: async (id, data) => {
+        return await api.fetch(`/api/books/${id}`, {
+            method: 'PUT',
+            body: data
+        });
+    },
+    delete: async (id) => {
+        return await api.fetch(`/api/books/${id}`, {
+            method: 'DELETE'
+        });
+    }
 };
 
-const borrowAPI = {
-    async borrow(bookId, days = 21) { return api.post('/borrow', { kitapID: bookId, oduncGunSayisi: days }); },
-    async returnBook(borrowId) { return api.post(`/borrow/${borrowId}/return`, {}); },
-    async getMyBooks() { return api.get('/borrow/my-books'); },
-    async getAll() { return api.get('/borrow/all'); },
-    async getOverdue() { return api.get('/borrow/overdue'); },
-    async checkOverdue() { return api.post('/borrow/check-overdue'); }
-};
-
+// --- 3. KATEGORİ API ---
 const categoryAPI = {
-    async getAll() { return api.get('/categories'); },
-    async getById(categoryId) { return api.get(`/categories/${categoryId}`); },
-    async create(categoryData) { return api.post('/categories', categoryData); },
-    async update(categoryId, categoryData) { return api.put(`/categories/${categoryId}`, categoryData); },
-    async delete(categoryId) { return api.delete(`/categories/${categoryId}`); }
+    getAll: async () => {
+        return await api.fetch('/api/categories');
+    }
 };
 
-const authorAPI = {
-    async getAll(params = {}) {
-        const queryString = new URLSearchParams(params).toString();
-        return api.get(`/authors${queryString ? '?' + queryString : ''}`);
+// --- 4. ÖDÜNÇ (BORROW) API ---
+const borrowAPI = {
+    getMyBooks: async () => {
+        return await api.fetch('/api/borrow/my-books');
     },
-    async getById(authorId) { return api.get(`/authors/${authorId}`); },
-    async create(authorData) { return api.post('/authors', authorData); },
-    async update(authorId, authorData) { return api.put(`/authors/${authorId}`, authorData); },
-    async delete(authorId) { return api.delete(`/authors/${authorId}`); }
+    borrow: async (bookId) => {
+        return await api.fetch('/api/borrow', {
+            method: 'POST',
+            body: { kitapID: bookId }
+        });
+    },
+    returnBook: async (borrowId) => {
+        return await api.fetch(`/api/borrow/${borrowId}/return`, {
+            method: 'POST'
+        });
+    }
 };
 
+// --- 5. KULLANICI (USER) API ---
 const userAPI = {
-    async getProfile() { return api.get('/users/profile'); },
-    async getPenalties() { return api.get('/users/penalties'); },
-    async getDebt() { return api.get('/users/debt'); },
-    async payPenalty(penaltyId) { return api.post(`/users/penalties/${penaltyId}/pay`); },
-
-    // --- YENİ EKLENEN FAVORİ METODLARI ---
-    async getFavorites() { return api.get('/users/favorites'); },
-    async addFavorite(bookId) { return api.post(`/users/favorites/${bookId}`); },
-    async removeFavorite(bookId) { return api.delete(`/users/favorites/${bookId}`); }
+    getProfile: async () => {
+        return await api.fetch('/api/users/profile');
+    },
+    getDebt: async () => {
+        return await api.fetch('/api/users/debt');
+    },
+    getPenalties: async () => {
+        return await api.fetch('/api/users/penalties');
+    },
+    payPenalty: async (penaltyId) => {
+        return await api.fetch(`/api/users/penalties/${penaltyId}/pay`, {
+            method: 'POST'
+        });
+    },
+    addFavorite: async (bookId) => {
+        return await api.fetch(`/api/users/favorites/${bookId}`, {
+            method: 'POST'
+        });
+    },
+    removeFavorite: async (bookId) => {
+        return await api.fetch(`/api/users/favorites/${bookId}`, {
+            method: 'DELETE'
+        });
+    },
+    getFavorites: async () => {
+        return await api.fetch('/api/users/favorites');
+    }
 };
 
-const adminAPI = {
-    async getAllUsers() { return api.get('/admin/users'); },
-    async updateUser(userId, userData) { return api.put(`/admin/users/${userId}`, userData); },
-    async deleteUser(userId) { return api.delete(`/admin/users/${userId}`); },
-    async getAllPenalties() { return api.get('/admin/penalties'); },
-    async getStatistics() { return api.get('/admin/statistics'); }
-};
-
-// YENİ EKLENEN KISIM:
+// --- 6. REZERVASYON API ---
 const reservationAPI = {
-    async create(reservationData) { return api.post('/reservations', reservationData); },
-    async getMyReservations() { return api.get('/reservations/my-reservations'); },
-    async cancel(reservationId) { return api.post(`/reservations/${reservationId}/cancel`); }
+    getMyReservations: async () => {
+        return await api.fetch('/api/reservations/my-reservations');
+    },
+    create: async (data) => {
+        return await api.fetch('/api/reservations', {
+            method: 'POST',
+            body: data
+        });
+    }
 };
 
-// Review API
+// --- 7. YORUM (REVIEW) API ---
 const reviewAPI = {
-    async getByBook(bookId) {
-        return api.get(`/reviews/book/${bookId}`);
+    getByBook: async (bookId) => {
+        return await api.fetch(`/api/reviews/book/${bookId}`);
     },
-    async add(data) {
-        return api.post('/reviews', data);
+    add: async (data) => {
+        return await api.fetch('/api/reviews', {
+            method: 'POST',
+            body: data
+        });
     },
-    async delete(reviewId) {
-        return api.delete(`/reviews/${reviewId}`);
+    delete: async (reviewId) => {
+        return await api.fetch(`/api/reviews/${reviewId}`, {
+            method: 'DELETE'
+        });
     }
 };

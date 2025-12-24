@@ -27,7 +27,7 @@
 
     <div class="container">
         <h1 style="margin: 30px 0;">Ödünç Kitaplarım</h1>
-        
+
         <div class="card">
             <h2 class="card-header">Aktif Ödünçler</h2>
             <div id="activeBorrows">
@@ -37,7 +37,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="card">
             <h2 class="card-header">Ceza Bilgileri</h2>
             <div id="penaltiesContainer">
@@ -47,7 +47,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="card">
             <h2 class="card-header">Geçmiş İşlemler</h2>
             <div id="historyBorrows">
@@ -57,125 +57,101 @@
                 </div>
             </div>
         </div>
-    </div>
 
-    <div class="mt-5">
-    <h2>Rezervasyonlarım (Sırada Beklediklerim)</h2>
-    <div id="reservations-list" class="table-responsive">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Kitap</th>
-                    <th>Rezervasyon Tarihi</th>
-                    <th>Durum</th>
-                </tr>
-            </thead>
-            <tbody id="reservations-body">
-                </tbody>
-        </table>
+        <div class="card mt-5">
+            <h2 class="card-header">Rezervasyonlarım (Sırada Beklediklerim)</h2>
+            <div id="reservations-list" class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Kitap</th>
+                            <th>Rezervasyon Tarihi</th>
+                            <th>Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reservations-body">
+                        <tr><td colspan="3">Yükleniyor...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
-</div>
 
     <script src="static/js/api.js"></script>
     <script src="static/js/auth.js"></script>
     <script src="static/js/token_check.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
-            // Token kontrolü
+            // 1. Token kontrolü
             const tokenCheck = checkTokenExpiry();
-            console.log('Token Kontrolü:', tokenCheck);
-            
+
             if (!tokenCheck.valid) {
-                console.error('Token geçersiz:', tokenCheck.reason);
+                console.warn('Token geçersiz:', tokenCheck.reason);
                 if (tokenCheck.expired) {
                     alert('Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
                 }
                 window.location.href = 'login.html';
                 return;
             }
-            
-            const token = api.getToken();
-            if (!token) {
-                console.warn('Token bulunamadı, login sayfasına yönlendiriliyor');
-                window.location.href = 'login.html';
-                return;
-            }
-            
+
             const user = api.getUser();
             if (!user) {
-                console.warn('Kullanıcı bilgisi bulunamadı, login sayfasına yönlendiriliyor');
                 window.location.href = 'login.html';
                 return;
             }
-            
-            console.log('Token geçerli, kullanıcı:', user);
-            
+
+            // 2. Arayüzü güncelle
             if (user.rol === 'Admin') {
                 document.querySelectorAll('.admin-link').forEach(el => el.classList.remove('hidden'));
             }
-            
             updateUserInfo(user);
-            
+
+            // 3. Verileri Yükle
             await loadMyBooks();
             await loadPenalties();
+            await loadReservations();
         });
-        
+
         async function loadMyBooks() {
             const activeContainer = document.getElementById('activeBorrows');
             const historyContainer = document.getElementById('historyBorrows');
-            
+
             try {
                 const result = await borrowAPI.getMyBooks();
-                
-                if (!result) {
-                    activeContainer.innerHTML = '<p>Veri alınamadı.</p>';
-                    historyContainer.innerHTML = '<p>Veri alınamadı.</p>';
-                    return;
+
+                if (!result || !result.success) {
+                    throw new Error(result?.message || 'Veri alınamadı');
                 }
-                
-                if (!result.success) {
-                    activeContainer.innerHTML = `<p style="color: orange;">${result.message || 'Veri alınamadı'}</p>`;
-                    historyContainer.innerHTML = '<p>Veri yüklenemedi.</p>';
-                    return;
-                }
-                
+
                 const borrows = result.borrows || [];
                 const active = borrows.filter(b => b.durum === 'Aktif');
                 const history = borrows.filter(b => b.durum === 'IadeEdildi');
-                
+
                 displayBorrows(active, 'activeBorrows', true);
                 displayBorrows(history, 'historyBorrows', false);
             } catch (error) {
-                console.error('Ödünç kitaplar yüklenirken hata:', error);
-                const errorMsg = error.message || 'Veriler yüklenirken bir hata oluştu';
-                // E-posta hatası ise kullanıcıya gösterme, sadece log'a yaz
-                if (errorMsg.includes('Subject') || errorMsg.includes('email') || errorMsg.includes('mail')) {
-                    console.warn('E-posta hatası (görmezden geliniyor):', errorMsg);
-                    activeContainer.innerHTML = '<p>Kayıt bulunamadı.</p>';
-                    historyContainer.innerHTML = '<p>Kayıt bulunamadı.</p>';
-                } else {
-                    activeContainer.innerHTML = `<p style="color: red;">Hata: ${errorMsg}</p>`;
-                    historyContainer.innerHTML = '<p>Veri yüklenemedi.</p>';
-                    showAlert('Veriler yüklenirken bir hata oluştu: ' + errorMsg, 'danger');
-                }
+                console.error('Hata:', error);
+                activeContainer.innerHTML = '<p>Kayıt bulunamadı veya yüklenirken hata oluştu.</p>';
+                historyContainer.innerHTML = '<p>-</p>';
             }
         }
-        
+
         function displayBorrows(borrows, containerId, showReturnButton) {
             const container = document.getElementById(containerId);
-            
-            if (borrows.length === 0) {
+
+            if (!borrows || borrows.length === 0) {
                 container.innerHTML = '<p>Kayıt bulunamadı.</p>';
                 return;
             }
-            
+
             const table = document.createElement('table');
+            table.className = 'table'; // CSS sınıfı eklendi
             table.innerHTML = `
                 <thead>
                     <tr>
                         <th>Kitap</th>
                         <th>Ödünç Tarihi</th>
-                        <th>Beklenen İade</th>
+                        <th>Son Teslim</th>
                         <th>Durum</th>
                         ${showReturnButton ? '<th>İşlem</th>' : ''}
                     </tr>
@@ -187,149 +163,119 @@
                             <td>${new Date(borrow.oduncAlmaTarihi).toLocaleDateString('tr-TR')}</td>
                             <td>${new Date(borrow.beklenenIadeTarihi).toLocaleDateString('tr-TR')}</td>
                             <td>
-                                <span class="badge ${borrow.durum === 'Aktif' ? 'badge-success' : 'badge-warning'}">
+                                <span class="badge ${borrow.durum === 'Aktif' ? 'badge-success' : 'badge-secondary'}">
                                     ${borrow.durum}
                                 </span>
-                                ${borrow.gecikmeGunu > 0 ? `<span class="badge badge-danger">${borrow.gecikmeGunu} gün gecikme</span>` : ''}
+                                ${borrow.gecikmeGunu > 0 ? `<br><small style="color:red">(${borrow.gecikmeGunu} gün gecikme)</small>` : ''}
                             </td>
                             ${showReturnButton ? `
                                 <td>
-                                    <button onclick="returnBook(${borrow.oduncID})" class="btn btn-primary">İade Et</button>
+                                    <button onclick="returnBook(${borrow.oduncID})" class="btn btn-sm btn-primary">İade Et</button>
                                 </td>
                             ` : ''}
                         </tr>
                     `).join('')}
                 </tbody>
             `;
-            
+
             container.innerHTML = '';
             container.appendChild(table);
         }
-        
+
         async function returnBook(borrowId) {
             if (!confirm('Bu kitabı iade etmek istediğinize emin misiniz?')) {
                 return;
             }
-            
             try {
                 const result = await borrowAPI.returnBook(borrowId);
                 if (result.success) {
-                    showAlert('Kitap iade edildi!', 'success');
+                    alert('Kitap başarıyla iade edildi.');
                     await loadMyBooks();
                     await loadPenalties();
+                } else {
+                    alert('Hata: ' + result.message);
                 }
             } catch (error) {
-                showAlert(error.message || 'Kitap iade edilirken bir hata oluştu', 'danger');
+                alert('İşlem sırasında hata oluştu.');
             }
         }
-        
+
         async function loadPenalties() {
             const container = document.getElementById('penaltiesContainer');
-            
             try {
+                // Eğer userAPI.getPenalties fonksiyonu endpoint'i yanlışsa 404 dönebilir, kontrol edin.
                 const result = await userAPI.getPenalties();
-                
-                if (!result) {
-                    container.innerHTML = '<p>Veri alınamadı.</p>';
-                    return;
-                }
-                
-                if (!result.success) {
-                    container.innerHTML = `<p style="color: orange;">${result.message || 'Veri alınamadı'}</p>`;
-                    return;
-                }
-                
-                const penalties = result.penalties || [];
-                const pending = penalties.filter(p => p.durum === 'Beklemede');
-                
-                if (pending.length === 0) {
+
+                if (!result || !result.success || !result.penalties || result.penalties.length === 0) {
                     container.innerHTML = '<p>Bekleyen cezanız yok.</p>';
                     return;
                 }
-                
-                const table = document.createElement('table');
-                table.innerHTML = `
-                    <thead>
-                        <tr>
-                            <th>Ceza Nedeni</th>
-                            <th>Miktar</th>
-                            <th>Tarih</th>
-                            <th>İşlem</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${pending.map(penalty => `
+
+                const pending = result.penalties.filter(p => p.durum === 'Beklemede');
+                 if (pending.length === 0) {
+                    container.innerHTML = '<p>Bekleyen cezanız yok.</p>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <table class="table">
+                        <thead>
                             <tr>
-                                <td>${penalty.cezaNedeni || '-'}</td>
-                                <td>${penalty.cezaMiktari ? penalty.cezaMiktari.toFixed(2) : '0.00'} TL</td>
-                                <td>${penalty.olusturmaTarihi ? new Date(penalty.olusturmaTarihi).toLocaleDateString('tr-TR') : '-'}</td>
-                                <td>
-                                    <button onclick="payPenalty(${penalty.cezaID})" class="btn btn-success">Öde</button>
-                                </td>
+                                <th>Neden</th>
+                                <th>Tutar</th>
+                                <th>Tarih</th>
+                                <th>İşlem</th>
                             </tr>
-                        `).join('')}
-                    </tbody>
+                        </thead>
+                        <tbody>
+                            ${pending.map(p => `
+                                <tr>
+                                    <td>${p.cezaNedeni || p.aciklama || 'Gecikme'}</td>
+                                    <td>${p.cezaMiktari || p.tutar} TL</td>
+                                    <td>${new Date(p.olusturmaTarihi).toLocaleDateString('tr-TR')}</td>
+                                    <td><button onclick="payPenalty(${p.cezaID})" class="btn btn-sm btn-success">Öde</button></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
                 `;
-                
-                container.innerHTML = '';
-                container.appendChild(table);
             } catch (error) {
-                console.error('Ceza bilgileri yüklenirken hata:', error);
-                const errorMsg = error.message || 'Ceza bilgileri yüklenirken bir hata oluştu';
-                // E-posta hatası ise kullanıcıya gösterme
-                if (errorMsg.includes('Subject') || errorMsg.includes('email') || errorMsg.includes('mail')) {
-                    console.warn('E-posta hatası (görmezden geliniyor):', errorMsg);
-                    container.innerHTML = '<p>Bekleyen cezanız yok.</p>';
-                } else {
-                    container.innerHTML = `<p style="color: red;">Hata: ${errorMsg}</p>`;
+                console.warn('Ceza yükleme hatası:', error);
+                container.innerHTML = '<p>Cezalar yüklenemedi.</p>';
+            }
+        }
+
+        async function payPenalty(id) {
+            if(confirm('Cezayı ödemek istiyor musunuz?')) {
+                try {
+                    await userAPI.payPenalty(id);
+                    alert('Ödeme başarılı');
+                    loadPenalties();
+                } catch(e) {
+                    alert('Hata oluştu');
                 }
             }
         }
-        
-        async function payPenalty(penaltyId) {
-            if (!confirm('Bu cezayı ödemek istediğinize emin misiniz?')) {
-                return;
-            }
-            
+
+        async function loadReservations() {
+            const tbody = document.getElementById('reservations-body');
             try {
-                const result = await userAPI.payPenalty(penaltyId);
-                if (result.success) {
-                    showAlert('Ceza ödendi!', 'success');
-                    await loadPenalties();
+                const result = await reservationAPI.getMyReservations();
+                if (result.success && result.reservations && result.reservations.length > 0) {
+                    tbody.innerHTML = result.reservations.map(res => `
+                        <tr>
+                            <td>${res.kitap ? res.kitap.baslik : 'Kitap'}</td>
+                            <td>${new Date(res.rezervasyonTarihi).toLocaleDateString('tr-TR')}</td>
+                            <td>${res.durum}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center">Aktif rezervasyonunuz yok.</td></tr>';
                 }
             } catch (error) {
-                showAlert(error.message || 'Ceza ödenirken bir hata oluştu', 'danger');
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center">Yüklenemedi.</td></tr>';
             }
         }
-
-        // Sayfa yüklendiğinde çalışacak fonksiyon
-async function loadReservations() {
-    try {
-        const result = await reservationAPI.getMyReservations();
-        const tbody = document.getElementById('reservations-body');
-
-        if (result.success && result.reservations.length > 0) {
-            tbody.innerHTML = result.reservations.map(res => `
-                <tr>
-                    <td>${res.kitap.baslik}</td>
-                    <td>${new Date(res.rezervasyonTarihi).toLocaleDateString('tr-TR')}</td>
-                    <td>
-                        <span class="badge bg-info text-dark">${res.durum}</span>
-                    </td>
-                </tr>
-            `).join('');
-        } else {
-            tbody.innerHTML = '<tr><td colspan="3" class="text-center">Aktif rezervasyonunuz bulunmuyor.</td></tr>';
-        }
-    } catch (error) {
-        console.error('Rezervasyonlar yüklenirken hata:', error);
-    }
-}
-
-// Mevcut loadMyBooks() fonksiyonunun hemen altına ekleyin:
-// loadMyBooks();
-loadReservations(); // <-- Bunu çağırın
     </script>
 </body>
 </html>
-
