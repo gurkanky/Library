@@ -119,6 +119,56 @@
         </div>
     </div>
 
+    <div id="editBookModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="margin: 0;">Kitap Düzenle</h3>
+                <span class="close" onclick="closeEditModal()" style="cursor: pointer; font-size: 24px;">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="editBookForm">
+                    <input type="hidden" id="editBookId">
+
+                    <div class="form-group">
+                        <label>Kitap Başlığı</label>
+                        <input type="text" id="editBaslik" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>ISBN</label>
+                        <input type="text" id="editISBN">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Yazar (Ad Soyad)</label>
+                        <input type="text" id="editYazar" placeholder="Yazar seçimi yapılacak..." disabled style="background-color: #e9ecef;">
+                        <small style="color:red">Yazar güncellemesi şu an desteklenmiyor</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Kategori</label>
+                        <select id="editKategoriID" required>
+                            </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Yayın Yılı</label>
+                        <input type="number" id="editYayinYili">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Stok Sayısı (Toplam)</label>
+                        <input type="number" id="editStok">
+                    </div>
+
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary">Güncelle</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="static/js/api.js"></script>
     <script src="static/js/auth.js"></script>
     <script>
@@ -147,6 +197,10 @@
                 categories = result.categories;
                 const categoryFilter = document.getElementById('categoryFilter');
                 const bookKategori = document.getElementById('bookKategori');
+
+                // Önce temizle (varsayılanlar hariç)
+                categoryFilter.innerHTML = '<option value="">Tüm Kategoriler</option>';
+                bookKategori.innerHTML = '';
 
                 categories.forEach(cat => {
                     const option1 = document.createElement('option');
@@ -211,7 +265,7 @@
                             <button onclick="openReviews(${book.kitapID}, '${book.baslik}')" class="btn btn-info" style="background-color: #17a2b8; color: white;">Yorumlar</button>
                         `;
 
-                        // FAVORİ BUTONU (YENİ)
+                        // FAVORİ BUTONU
                         let favButton = `
                             <button onclick="addToFavorites(${book.kitapID})" class="btn btn-outline-danger" title="Favorilere Ekle" style="margin-top:5px; border-color: #dc3545; color: #dc3545; background: white;">
                                 <i class="fas fa-heart"></i>
@@ -259,22 +313,19 @@
             }
         }
 
-      // --- YENİ: Favoriye Ekleme Fonksiyonu ---
-async function addToFavorites(bookId) {
-    try {
-        // fetchWithAuth yerine userAPI kullanıyoruz
-        const response = await userAPI.addFavorite(bookId);
-
-        if (response.success) {
-            showAlert('Kitap favorilere eklendi!', 'success');
-        } else {
-            showAlert(response.message || 'Bir hata oluştu', 'warning');
+        async function addToFavorites(bookId) {
+            try {
+                const response = await userAPI.addFavorite(bookId);
+                if (response.success) {
+                    showAlert('Kitap favorilere eklendi!', 'success');
+                } else {
+                    showAlert(response.message || 'Bir hata oluştu', 'warning');
+                }
+            } catch (error) {
+                console.error('Favori hatası:', error);
+                showAlert('Hata: ' + (error.message || 'Bilinmeyen hata'), 'danger');
+            }
         }
-    } catch (error) {
-        console.error('Favori hatası:', error);
-        showAlert('Hata: ' + (error.message || 'Bilinmeyen hata'), 'danger');
-    }
-}
 
         async function borrowBook(bookId) {
             if (!confirm('Bu kitabı ödünç almak istediğinize emin misiniz?')) return;
@@ -402,6 +453,92 @@ async function addToFavorites(bookId) {
                 if (result.success) { showAlert('Silindi!', 'success'); await loadBooks(); }
             } catch (error) { showAlert(error.message, 'danger'); }
         }
+
+        // --- YENİ EKLENEN KISIM: KİTAP DÜZENLEME JS ---
+
+        // 1. Düzenleme Modalını Aç ve Bilgileri Doldur
+        async function editBook(bookId) {
+            const modal = document.getElementById('editBookModal');
+
+            // Önce kategorileri doldur
+            await loadCategoriesForEdit();
+
+            try {
+                const result = await bookAPI.getById(bookId);
+
+                if (result.success) {
+                    const book = result.book;
+
+                    // Form alanlarını doldur (model yapısına göre id veya kitapID)
+                    document.getElementById('editBookId').value = book.kitapID || book.id;
+                    document.getElementById('editBaslik').value = book.baslik;
+                    document.getElementById('editISBN').value = book.isbn || '';
+                    document.getElementById('editYayinYili').value = book.yayinYili || '';
+                    document.getElementById('editStok').value = book.toplamKopyaSayisi;
+
+                    // Kategori seçimi
+                    if (book.kategori) {
+                         // Eğer backend kategori obje dönüyorsa
+                        document.getElementById('editKategoriID').value = book.kategori.kategoriID || book.kategori.id;
+                    } else if (book.kategoriID) {
+                        // Eğer backend direkt ID dönüyorsa
+                         document.getElementById('editKategoriID').value = book.kategoriID;
+                    }
+
+                    modal.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Kitap detayı alınamadı:', error);
+                alert('Kitap bilgileri yüklenirken hata oluştu.');
+            }
+        }
+
+        function closeEditModal() {
+            document.getElementById('editBookModal').style.display = 'none';
+        }
+
+        async function loadCategoriesForEdit() {
+            try {
+                const result = await categoryAPI.getAll();
+                const select = document.getElementById('editKategoriID');
+                select.innerHTML = '<option value="">Seçiniz...</option>';
+
+                if (result.success) {
+                    result.categories.forEach(cat => {
+                        select.innerHTML += `<option value="${cat.kategoriID}">${cat.kategoriAdi}</option>`;
+                    });
+                }
+            } catch (error) {
+                console.error('Kategoriler yüklenemedi:', error);
+            }
+        }
+
+        document.getElementById('editBookForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const bookId = document.getElementById('editBookId').value;
+            const data = {
+                baslik: document.getElementById('editBaslik').value,
+                isbn: document.getElementById('editISBN').value,
+                yayinYili: parseInt(document.getElementById('editYayinYili').value),
+                toplamKopyaSayisi: parseInt(document.getElementById('editStok').value),
+                kategoriID: parseInt(document.getElementById('editKategoriID').value)
+            };
+
+            try {
+                const result = await bookAPI.update(bookId, data);
+                if (result.success) {
+                    alert('Kitap başarıyla güncellendi!');
+                    closeEditModal();
+                    loadBooks(); // Listeyi yenile
+                } else {
+                    alert('Hata: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Güncelleme hatası:', error);
+                alert('Güncelleme sırasında bir hata oluştu.');
+            }
+        });
     </script>
 </body>
 </html>

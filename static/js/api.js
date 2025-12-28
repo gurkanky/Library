@@ -88,14 +88,12 @@ const authAPI = {
     getCurrentUser: async () => {
         return await api.fetch('/api/auth/me');
     },
-    // YENİ: Şifremi Unuttum
     forgotPassword: async (email) => {
         return await api.fetch('/api/auth/forgot-password', {
             method: 'POST',
             body: { eposta: email }
         });
     },
-    // YENİ: Şifre Sıfırlama
     resetPassword: async (data) => {
         return await api.fetch('/api/auth/reset-password', {
             method: 'POST',
@@ -153,6 +151,17 @@ const borrowAPI = {
         return await api.fetch(`/api/borrow/${borrowId}/return`, {
             method: 'POST'
         });
+    },
+    getAll: async () => {
+        return await api.fetch('/api/borrow/all');
+    },
+    getOverdue: async () => {
+        return await api.fetch('/api/borrow/overdue');
+    },
+    checkOverdue: async () => {
+        return await api.fetch('/api/borrow/check-overdue', {
+            method: 'POST'
+        });
     }
 };
 
@@ -184,6 +193,18 @@ const userAPI = {
     },
     getFavorites: async () => {
         return await api.fetch('/api/users/favorites');
+    },
+    // YENİ EKLENENLER:
+    deleteAccount: async () => {
+        return await api.fetch('/api/users/delete-account', {
+            method: 'DELETE'
+        });
+    },
+    changePassword: async (data) => {
+        return await api.fetch('/api/users/change-password', {
+            method: 'POST',
+            body: data
+        });
     }
 };
 
@@ -213,6 +234,30 @@ const reviewAPI = {
     },
     delete: async (reviewId) => {
         return await api.fetch(`/api/reviews/${reviewId}`, {
+            method: 'DELETE'
+        });
+    }
+};
+
+// --- 8. ADMIN API ---
+const adminAPI = {
+    getStatistics: async () => {
+        return await api.fetch('/api/admin/statistics');
+    },
+    getAllPenalties: async () => {
+        return await api.fetch('/api/admin/penalties');
+    },
+    getUsers: async () => {
+        return await api.fetch('/api/admin/users');
+    },
+    updateUser: async (id, data) => {
+        return await api.fetch(`/api/admin/users/${id}`, {
+            method: 'PUT',
+            body: data
+        });
+    },
+    deleteUser: async (id) => {
+        return await api.fetch(`/api/admin/users/${id}`, {
             method: 'DELETE'
         });
     }

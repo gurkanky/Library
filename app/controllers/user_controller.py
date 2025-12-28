@@ -12,7 +12,8 @@ user_bp = Blueprint('user', __name__)
 def get_profile():
     """Kullanıcı profil bilgilerini getir"""
     try:
-        user_id = get_jwt_identity()
+        # Düzeltme: ID'yi int'e çevir
+        user_id = int(get_jwt_identity())
         user = UserRepository.find_by_id(user_id)
 
         if user:
@@ -29,7 +30,8 @@ def get_profile():
 def get_penalties():
     """Kullanıcının cezalarını listele"""
     try:
-        user_id = get_jwt_identity()
+        # Düzeltme: ID'yi int'e çevir
+        user_id = int(get_jwt_identity())
         penalties = PenaltyService.get_user_penalties(user_id)
 
         return jsonify({'success': True, 'penalties': penalties, 'count': len(penalties)}), 200
@@ -43,7 +45,8 @@ def get_penalties():
 def get_debt():
     """Kullanıcının toplam borcunu getir"""
     try:
-        user_id = get_jwt_identity()
+        # Düzeltme: ID'yi int'e çevir
+        user_id = int(get_jwt_identity())
         debt = PenaltyService.get_total_debt(user_id)
 
         return jsonify({'success': True, **debt}), 200
@@ -57,7 +60,10 @@ def get_debt():
 def pay_penalty(penalty_id):
     """Ceza öde"""
     try:
-        user_id = get_jwt_identity()
+        # --- KRİTİK DÜZELTME BURADA ---
+        # Token'dan gelen ID string olabilir, int'e çeviriyoruz.
+        user_id = int(get_jwt_identity())
+
         result = PenaltyService.pay_penalty(penalty_id, user_id)
 
         if result['success']:
@@ -66,17 +72,19 @@ def pay_penalty(penalty_id):
             return jsonify(result), 400
 
     except Exception as e:
+        # Hata detayını terminalde görebilmek için:
+        print(f"HATA (Pay Penalty): {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
-
-# --- YENİ ENDPOINTLER ---
 
 @user_bp.route('/change-password', methods=['POST'])
 @jwt_required()
 def change_password():
     """Kullanıcı şifresini değiştir"""
     try:
-        user_id = get_jwt_identity()
+        # Düzeltme: ID'yi int'e çevir
+        user_id = int(get_jwt_identity())
+
         data = request.get_json()
         old_password = data.get('old_password')
         new_password = data.get('new_password')
@@ -103,7 +111,8 @@ def change_password():
 def delete_account():
     """Hesabı sil (Borç/Kitap kontrolü ile)"""
     try:
-        user_id = get_jwt_identity()
+        # Düzeltme: ID'yi int'e çevir
+        user_id = int(get_jwt_identity())
 
         # 1. Kontrol: Üzerinde kitap veya borç var mı?
         if UserRepository.check_has_debt_or_loans(user_id):
@@ -127,7 +136,8 @@ def delete_account():
 def get_user_favorites():
     """Favori kitapları getir"""
     try:
-        user_id = get_jwt_identity()
+        # Düzeltme: ID'yi int'e çevir
+        user_id = int(get_jwt_identity())
         favorites = UserRepository.get_favorites(user_id)
         return jsonify({
             'success': True,
@@ -142,7 +152,7 @@ def get_user_favorites():
 def toggle_favorite(book_id):
     """Favoriye ekle veya çıkar"""
     try:
-        # DÜZELTME: Token'dan gelen ID string olabilir, int'e çeviriyoruz.
+        # Düzeltme: ID'yi int'e çevir
         user_id = int(get_jwt_identity())
 
         if request.method == 'POST':
@@ -156,5 +166,4 @@ def toggle_favorite(book_id):
             return jsonify({'success': False, 'message': 'Favorilerde bulunamadı'}), 400
 
     except Exception as e:
-        print(f"Favori Hatası: {str(e)}")  # Hatayı terminalde görmek için log ekledik
         return jsonify({'success': False, 'message': str(e)}), 500
